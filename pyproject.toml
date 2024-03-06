@@ -1,10 +1,10 @@
 [tool.poetry]
-name = "sgnp-segmentation"
+name = "sngp-segmentation"
 version = "0.1.0"
 description = ""
 authors = ["Patrick Kage <patrick.r.kage@gmail.com>"]
 readme = "README.md"
-packages = [{include = "sgnp_segmentation"}]
+packages = [{include = "sngp_segmentation"}]
 
 [tool.poetry.dependencies]
 python = "^3.9"
