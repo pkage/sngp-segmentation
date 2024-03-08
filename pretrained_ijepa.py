@@ -643,22 +643,27 @@ def load_checkpoint(
     try:
         checkpoint = torch.load(r_path, map_location=torch.device('cpu'))
         epoch = checkpoint['epoch']
-
+        print('epoch')
         # -- loading encoder
-        pretrained_dict = checkpoint['encoder']
+
+        
+        pretrained_dict = {key.replace('module.', ''): checkpoint['encoder'][key] for key in checkpoint['encoder']}
         msg = encoder.load_state_dict(pretrained_dict)
         logger.info(f'loaded pretrained encoder from epoch {epoch} with msg: {msg}')
+        print('encoder')
 
         # -- loading predictor
-        pretrained_dict = checkpoint['predictor']
+        pretrained_dict =  {key.replace('module.', ''): checkpoint['predictor'][key] for key in checkpoint['predictor']}
         msg = predictor.load_state_dict(pretrained_dict)
-        logger.info(f'loaded pretrained encoder from epoch {epoch} with msg: {msg}')
+        logger.info(f'loaded pretrained predictor from epoch {epoch} with msg: {msg}')
+        print('predictor')
 
         # -- loading target_encoder
         if target_encoder is not None:
-            pretrained_dict = checkpoint['target_encoder']
+            pretrained_dict = {key.replace('module.', ''): checkpoint['target_encoder'][key] for key in checkpoint['target_encoder']}
             msg = target_encoder.load_state_dict(pretrained_dict)
-            logger.info(f'loaded pretrained encoder from epoch {epoch} with msg: {msg}')
+            logger.info(f'loaded pretrained target_encoder from epoch {epoch} with msg: {msg}')
+        print('target_encoder')
 
         # -- loading optimizer
         # opt.load_state_dict(checkpoint['opt'])
