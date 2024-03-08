@@ -88,7 +88,7 @@ class RandomFeatureGaussianProcess(nn.Module):
         update_precision: bool = False,
     ):
     
-        features = self.rff(X).detach()
+        features = self.rff(X)
 
         if update_precision:
             self.update_precision_(features)
