@@ -114,6 +114,7 @@ class RandomFeatureGaussianProcess(nn.Module):
         self.precision[...] = self.precision_initial.detach()
 
     def update_precision_(self, features: torch.Tensor):
+        features = torch.flatten(features, 0, -2)
         with torch.no_grad():
             if self.momentum < 0:
                 # Use this to compute the precision matrix for the whole
@@ -217,7 +218,7 @@ class SNGP_probe(nn.Module):
         x = patches_to_image(x, self.patch_size) # b, c, w, h
         
         x = x.permute(0, 2, 3, 1) # b, w, h, c
-        x = self.logits(x, with_variance, update_precision)
+        x = self.logits(x, with_variance=with_variance, update_precision=update_precision)
         x = x.permute(0, 3, 1, 2) # b, c, w, h
         return x
             
