@@ -33,6 +33,9 @@ if ! [ -f ./VOCtrainval_11-May-2012.tar ]; then
     curl -L -O -J http://host.robots.ox.ac.uk/pascal/VOC/voc2012/VOCtrainval_11-May-2012.tar
 fi
 
+# perf tuning
+export OMP_NUM_THREADS=16
+
 
 # kickoff
 poetry run torchrun \
