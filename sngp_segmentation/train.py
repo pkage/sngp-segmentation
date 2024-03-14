@@ -12,8 +12,7 @@ from torchvision.transforms.functional import InterpolationMode
 import yaml
 from yaml import Loader
 
-from utils import LabelToTensor, test_ddp, train_ddp
-
+from .utils import LabelToTensor, test_ddp, train_ddp
 from .ijepa import init_model, load_checkpoint
 from .sngp import SNGP_probe
 
