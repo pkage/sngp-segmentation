@@ -1,8 +1,11 @@
 import argparse
-import os
+
+from dotenv import load_dotenv
 
 from sngp_segmentation.train import training_process
-from sngp_segmentation.utils import setup, cleanup, wandb_setup, get_rank
+from sngp_segmentation.utils import cleanup, get_rank, setup, wandb_setup
+
+load_dotenv()
 
 
 def parse_args():
