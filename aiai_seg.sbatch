@@ -5,8 +5,8 @@
 #SBATCH --ntasks=1
 #SBATCH --mem=16G
 #SBATCH --gres=gpu:A40:2
-#SBATCH --output=/home/s1734411/sngp_seg/out.txt
-#SBATCH --error=/home/s1734411/sngp_seg/err.txt
+#SBATCH --output=/home/s1734411/sngp-segmentation/out.txt
+#SBATCH --error=/home/s1734411/sngp-segmentation/err.txt
 #SBATCH --time=02:30:00
 #SBATCH --job-name=sngp_seg
 #SBATCH --mail-user=p.kage@ed.ac.uk
