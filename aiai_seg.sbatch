@@ -47,6 +47,7 @@ source .env
 
 # kickoff
 echo "beginning training..."
+poetry run wandb offline
 poetry run torchrun \
     --nproc_per_node 2 \
     main_ddp.py \
