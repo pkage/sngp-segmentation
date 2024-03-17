@@ -1,7 +1,8 @@
 import argparse
+import os
 
 from sngp_segmentation.train import training_process
-from sngp_segmentation.utils import setup, cleanup
+from sngp_segmentation.utils import setup, cleanup, wandb_setup
 
 
 def parse_args():
@@ -26,6 +27,10 @@ def parse_args():
 
 def main():
     args = parse_args()
+
+    if os.environ['RANK'] == 0:
+        wandb_setup(args)
+
     setup()
     training_process(args)
     cleanup()

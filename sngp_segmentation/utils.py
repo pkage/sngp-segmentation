@@ -2,6 +2,7 @@ import torch
 import torch.distributed as dist
 import numpy as np
 from torchmetrics import JaccardIndex
+import wandb
 import os
 
 def setup():
@@ -9,6 +10,18 @@ def setup():
 
 def cleanup():
     dist.destroy_process_group()
+
+def wandb_setup(args):
+    if os.environ['RANK'] != 0:
+        print('initing wandb from a non-zero-rank process, weird stuff might happen')
+
+    assert os.environ['WANDB_PROJECT'] is not None
+    assert os.environ['WANDB_API_KEY'] is not None
+
+    wandb.init(
+        project=os.environ['WANDB_PROJECT'],
+        config=vars(args)
+    )
 
 
 def train_ddp(rank, device, epoch, model, loader, loss_fn, optimizer):
@@ -35,12 +48,31 @@ def train_ddp(rank, device, epoch, model, loader, loss_fn, optimizer):
     train_loss = ddp_loss[0] / ddp_loss[2]
 
     if rank == 0:
-           print('Train Epoch: {} \tAccuracy: {:.2f}% \tJaccard: {:.2f} \tAverage Loss: {:.6f}'
-            .format(epoch, 
-                    100*(ddp_loss[1] / ddp_loss[2]), 
-                    ddp_loss[3] / ddp_loss[4],
-                    ddp_loss[0] / ddp_loss[2])
-                    )
+
+        accuracy = 100 * (ddp_loss[1] / ddp_loss[2])
+        jaccard  = ddp_loss[3] / ddp_loss[4]
+        avg_loss = ddp_loss[0] / ddp_loss[2]
+
+        print(
+            'Train Epoch: {} \tAccuracy: {:.2f}% \tJaccard: {:.2f} \tAverage Loss: {:.6f}'
+            .format(
+                epoch, 
+                accuracy,
+                jaccard,
+                avg_loss
+                # 100*(ddp_loss[1] / ddp_loss[2]), 
+                # ddp_loss[3] / ddp_loss[4],
+                # ddp_loss[0] / ddp_loss[2]
+            )
+        )
+
+        wandb.log({
+            'train_epoch': epoch,
+            'accuracy': accuracy,
+            'jaccard': jaccard,
+            'avg_loss': avg_loss
+        })
+
 
     return train_acc, train_loss 
 

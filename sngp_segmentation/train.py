@@ -9,6 +9,7 @@ from torch.utils.data import DataLoader
 import torchvision
 from torchvision import transforms
 from torchvision.transforms.functional import InterpolationMode
+import wandb
 import yaml
 from yaml import Loader
 
@@ -86,7 +87,25 @@ def training_process(args):
     loss_fn = torch.nn.CrossEntropyLoss(ignore_index=255)
     optimizer = optim.Adam(model.parameters(), lr=args.learning_rate)
 
+
+    rank = os.environ['RANK']
+
     for epoch in range(args.epochs):
-        train_ddp(int(os.environ['RANK']), device, epoch, model, loader_train, loss_fn, optimizer)
-        test_ddp(int(os.environ['RANK']), device, model, loader_val, loss_fn)
+        train_ddp(
+            rank,
+            device,
+            epoch,
+            model,
+            loader_train,
+            loss_fn,
+            optimizer
+        )
+
+        test_ddp(
+            rank,
+            device,
+            model,
+            loader_val,
+            loss_fn
+        )
 

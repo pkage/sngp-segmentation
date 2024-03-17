@@ -31,6 +31,9 @@ echo Node IP: $head_node_ip
 . /home/fagg/tf_setup.sh
 conda activate /home/jroth/.conda/envs/torch
 
+# secrets -- wandb setup
+source .env
+
 srun torchrun \
 --nnodes $SLURM_JOB_NUM_NODES \
 --nproc_per_node 2 \

@@ -11,9 +11,9 @@
 #SBATCH --job-name=sngp_seg
 #SBATCH --mail-user=p.kage@ed.ac.uk
 #SBATCH --mail-type=ALL
-#SBATCH --chdir=/home/s1734411/sngp_seg/
+#SBATCH --chdir=/home/s1734411/sngp-segmentation/
 
-export PROJ_DIR=/home/s1734411/sngp_seg
+export PROJ_DIR=/home/s1734411/sngp-segmentation/
 export LSCRATCH=/disk/scratch/s1734411
 
 # load python, ensure the env is installed
@@ -36,6 +36,8 @@ fi
 # perf tuning
 export OMP_NUM_THREADS=16
 
+# secrets -- wandb setup
+source .env
 
 # kickoff
 poetry run torchrun \
