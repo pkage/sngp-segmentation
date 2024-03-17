@@ -1,5 +1,9 @@
 .env
 wandb/
+stdout.txt
+stderr.txt
+out.txt
+err.txt
 
 ### Python
 # Byte-compiled / optimized / DLL files
