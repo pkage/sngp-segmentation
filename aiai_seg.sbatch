@@ -16,6 +16,8 @@
 export PROJ_DIR=/home/s1734411/sngp-segmentation/
 export LSCRATCH=/disk/scratch/s1734411
 
+cd $PROJ_DIR
+
 # load python, ensure the env is installed
 export PATH=/home/s1734411/py3.11.4/bin:$PATH
 cd $PROJ_DIR

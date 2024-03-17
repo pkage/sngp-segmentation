@@ -11,8 +11,11 @@ def setup():
 def cleanup():
     dist.destroy_process_group()
 
+def get_rank():
+    return int(os.environ['RANK'])
+
 def wandb_setup(args):
-    if os.environ['RANK'] != 0:
+    if get_rank() != 0:
         print('initing wandb from a non-zero-rank process, weird stuff might happen')
 
     assert os.environ['WANDB_PROJECT'] is not None

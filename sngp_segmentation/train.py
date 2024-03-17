@@ -13,7 +13,7 @@ import wandb
 import yaml
 from yaml import Loader
 
-from .utils import LabelToTensor, test_ddp, train_ddp
+from .utils import LabelToTensor, test_ddp, train_ddp, get_rank
 from .ijepa import init_model, load_checkpoint
 from .sngp import SNGP_probe
 
@@ -88,11 +88,10 @@ def training_process(args):
     optimizer = optim.Adam(model.parameters(), lr=args.learning_rate)
 
 
-    rank = os.environ['RANK']
 
     for epoch in range(args.epochs):
         train_ddp(
-            rank,
+            get_rank(),
             device,
             epoch,
             model,
@@ -102,7 +101,7 @@ def training_process(args):
         )
 
         test_ddp(
-            rank,
+            get_rank(),
             device,
             model,
             loader_val,
