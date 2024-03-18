@@ -4,7 +4,7 @@
 #SBATCH --partition=AIAI_GPU
 #SBATCH --ntasks=1
 #SBATCH --mem=16G
-#SBATCH --gres=gpu:A40:2
+#SBATCH --gres=gpu:A40:4
 #SBATCH --output=/home/s1734411/sngp-segmentation/stdout.txt
 #SBATCH --error=/home/s1734411/sngp-segmentation/stderr.txt
 #SBATCH --time=02:30:00
@@ -49,7 +49,7 @@ source .env
 echo "beginning training..."
 poetry run wandb offline
 poetry run torchrun \
-    --nproc_per_node 2 \
+    --nproc_per_node 4 \
     main_ddp.py \
     --vit-ckpt ./IN1K-vit.h.14-300e.pth.tar
 
