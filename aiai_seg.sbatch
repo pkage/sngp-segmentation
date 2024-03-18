@@ -3,7 +3,7 @@
 
 #SBATCH --partition=AIAI_GPU
 #SBATCH --ntasks=1
-#SBATCH --mem=16G
+#SBATCH --mem=64G
 #SBATCH --gres=gpu:A40:4
 #SBATCH --output=/home/s1734411/sngp-segmentation/stdout.txt
 #SBATCH --error=/home/s1734411/sngp-segmentation/stderr.txt
