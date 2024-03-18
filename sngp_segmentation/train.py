@@ -75,6 +75,7 @@ def training_process(args):
         args.vit_ckpt,
         0
     )
+    target_encoder.requires_grad = False
     # target_encoder = load_pretrained_model('./in1k_vith14_ep300.yaml', '../models/IN1K-vit.h.14-300e.pth.tar', 0)
 
 
