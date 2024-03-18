@@ -46,6 +46,7 @@ def train_ddp(rank, device, epoch, model, loader, loss_fn, optimizer):
         ddp_loss[3] += jaccard(output, y)
         ddp_loss[4] += 1
 
+
     dist.all_reduce(ddp_loss, op=dist.ReduceOp.SUM)
     train_acc = ddp_loss[1] / ddp_loss[2] 
     train_loss = ddp_loss[0] / ddp_loss[2]
@@ -70,10 +71,10 @@ def train_ddp(rank, device, epoch, model, loader, loss_fn, optimizer):
         )
 
         wandb.log({
-            'train_epoch': epoch,
-            'accuracy': accuracy,
-            'jaccard': jaccard,
-            'avg_loss': avg_loss
+            'trn_epoch': epoch,
+            'trn_accuracy': accuracy,
+            'trn_jaccard': jaccard,
+            'trn_avg_loss': avg_loss
         })
 
 
@@ -103,12 +104,27 @@ def test_ddp(rank, device, model, loader, loss_fn):
     test_loss = ddp_loss[0] / ddp_loss[2]
 
     if rank == 0:
+
+        accuracy = 100 * (ddp_loss[1] / ddp_loss[2])
+        jaccard  = ddp_loss[3] / ddp_loss[4]
+        avg_loss = ddp_loss[0] / ddp_loss[2]
+
         print('\tAccuracy: {:.2f}% \tJaccard: {:.2f} \tAverage Loss: {:.6f}'
             .format( 
-                    100*(ddp_loss[1] / ddp_loss[2]), 
-                    ddp_loss[3] / ddp_loss[4],
-                    ddp_loss[0] / ddp_loss[2])
-                    )
+                accuracy,
+                jaccard,
+                avg_loss
+                # 100*(ddp_loss[1] / ddp_loss[2]), 
+                # ddp_loss[3] / ddp_loss[4],
+                # ddp_loss[0] / ddp_loss[2])
+            )
+        )
+
+        wandb.log({
+            'tst_accuracy': accuracy,
+            'tst_jaccard': jaccard,
+            'tst_avg_loss': avg_loss
+        })
 
     return test_acc, test_loss
 
