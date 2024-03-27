@@ -7,7 +7,7 @@
 #SBATCH --gres=gpu:A40:4
 #SBATCH --output=/home/s1734411/sngp-segmentation/stdout.txt
 #SBATCH --error=/home/s1734411/sngp-segmentation/stderr.txt
-#SBATCH --time=08:30:00
+#SBATCH --time=12:00:00
 #SBATCH --job-name=sngp_seg
 #SBATCH --mail-user=p.kage@ed.ac.uk
 #SBATCH --mail-type=ALL
@@ -49,10 +49,11 @@ source .env
 echo "beginning training..."
 poetry run wandb offline
 poetry run torchrun \
-    --nproc_per_node 2 \
+    --nproc_per_node 1 \
     main_ddp.py \
     --vit-ckpt ./IN1K-vit.h.14-300e.pth.tar \
     --batch_size 32 \
     --test_batch_size 32 \
-    --epochs 400
+    --epochs 400 \
+    --learning_rate 0.001 # 1e-3
 
