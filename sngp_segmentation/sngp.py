@@ -220,3 +220,20 @@ class SNGP_probe(nn.Module):
         x = x.permute(0, 3, 1, 2) # b, c, w, h
         return x
             
+class SNGP_FPFT(nn.Module):
+    def __init__(self, probe):
+        super(SNGP_probe, self).__init__()
+        self.backbone =  probe.backbone
+        self.patch_size =  probe.patch_size
+        self.linear = probe.linear
+        self.logits = probe.logits
+
+    def forward(self, x, update_precision=False, with_variance=False):
+        x = self.backbone(x)
+        x = self.linear(x)
+        x = patches_to_image(x, self.patch_size) # b, c, w, h
+        
+        x = x.permute(0, 2, 3, 1) # b, w, h, c
+        x = self.logits(x, with_variance=with_variance, update_precision=update_precision)
+        x = x.permute(0, 3, 1, 2) # b, c, w, h
+        return x

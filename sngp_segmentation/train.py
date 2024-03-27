@@ -4,6 +4,16 @@ import shutil
 
 import torch
 from torch.nn.parallel import DistributedDataParallel as DDP
+from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
+from torch.distributed.fsdp.fully_sharded_data_parallel import (
+    CPUOffload,
+    BackwardPrefetch,
+)
+from torch.distributed.fsdp.wrap import (
+    size_based_auto_wrap_policy,
+    enable_wrap,
+    wrap,
+)
 import torch.optim as optim
 from torch.utils.data import DataLoader
 import torchvision
@@ -12,10 +22,11 @@ from torchvision.transforms.functional import InterpolationMode
 import wandb
 import yaml
 from yaml import Loader
+import functools
 
 from .utils import LabelToTensor, test_ddp, train_ddp, get_rank
 from .ijepa import init_model, load_checkpoint
-from .sngp import SNGP_probe
+from .sngp import SNGP_probe, SNGP_FPFT
 
 def load_pretrained_model(yaml_path, checkpoint_path, device):
     with open(yaml_path, 'rb') as fp:
@@ -89,7 +100,7 @@ def training_process(args):
     ).to(device)
 
     # model = torch.hub.load('mateuszbuda/brain-segmentation-pytorch', 'unet', in_channels=3, out_channels=num_classes, init_features=32, pretrained=False).to(device)
-
+    
     model = DDP(
         model,
         device_ids=[device],
@@ -120,4 +131,98 @@ def training_process(args):
             loader_val,
             loss_fn
         )
+    
+    return model.state_dict()
+
+
+def fpft_training_process(args, state_dict=None):
+    num_classes = 20 + 1
+    device = int(os.environ['RANK']) % torch.cuda.device_count()
+
+    trans = transforms.Compose([
+        transforms.Resize(256),
+        transforms.CenterCrop(224),
+        transforms.ToTensor(),
+        transforms.Normalize(
+            mean=[0.485, 0.456, 0.406], 
+            std=[0.229, 0.224, 0.225]
+        )
+    ])
+
+    target_trans = transforms.Compose([
+        transforms.Resize(256, interpolation=InterpolationMode.NEAREST),
+        transforms.CenterCrop(224),
+        LabelToTensor(255)
+    ])
+
+    # load the voc file into our scratch space
+    shutil.copy(args.voc, os.environ['LSCRATCH'])
+
+    ds_train = torchvision.datasets.VOCSegmentation(os.environ['LSCRATCH'], image_set='train', transform=trans, target_transform=target_trans, download=True)
+    loader_train = DataLoader(ds_train, batch_size=args.batch_size, pin_memory=True, shuffle=True, num_workers=12)
+
+    ds_val = torchvision.datasets.VOCSegmentation(os.environ['LSCRATCH'], image_set='val', transform=trans, target_transform=target_trans, download=True)
+    loader_val = DataLoader(ds_val, batch_size=args.test_batch_size, pin_memory=True, shuffle=False, num_workers=12)
+
+    target_encoder = load_pretrained_model(
+        args.vit_cfg,
+        args.vit_ckpt,
+        0
+    )
+    target_encoder.requires_grad = False
+    # target_encoder = load_pretrained_model('./in1k_vith14_ep300.yaml', '../models/IN1K-vit.h.14-300e.pth.tar', 0)
+
+    probe = SNGP_probe(
+        target_encoder,
+        1280,
+        num_classes,
+        14
+    ).to(device)
+
+    if state_dict is not None:
+        probe.load_state_dict(state_dict)
+    else:
+        print('not loading a state dict, this will probably be catastrophic...')
+
+    model = SNGP_FPFT(probe).to(device)
+
+    # model = torch.hub.load('mateuszbuda/brain-segmentation-pytorch', 'unet', in_channels=3, out_channels=num_classes, init_features=32, pretrained=False).to(device)
+    auto_wrap_policy = functools.partial(
+        size_based_auto_wrap_policy, min_num_params=10_000_000
+    )
+    model = FSDP(model, 
+                auto_wrap_policy=auto_wrap_policy,
+                mixed_precision=torch.distributed.fsdp.MixedPrecision(
+                    param_dtype=torch.bfloat16, 
+                   reduce_dtype=torch.float32, 
+                    buffer_dtype=torch.float32, 
+                    cast_forward_inputs=True)
+                )
+
+    loss_fn = torch.nn.CrossEntropyLoss(ignore_index=255)
+    optimizer = optim.Adam(
+        model.parameters(),
+        lr=args.learning_rate
+    )
+
+    for epoch in range(args.epochs):
+        train_ddp(
+            get_rank(),
+            device,
+            epoch,
+            model,
+            loader_train,
+            loss_fn,
+            optimizer
+        )
+
+        test_ddp(
+            get_rank(),
+            device,
+            model,
+            loader_val,
+            loss_fn
+        )
+
+    return model.state_dict()
 
