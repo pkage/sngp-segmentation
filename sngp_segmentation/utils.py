@@ -42,11 +42,14 @@ def train_ddp(rank, device, epoch, model, loader, loss_fn, optimizer, accumulate
         if step % accumulate == (accumulate - 1):
             optimizer.step()
             optimizer.zero_grad()
+
         ddp_loss[0] += loss.item()
         ddp_loss[1] += torch.where(y != loss_fn.ignore_index, (output.argmax(1) == y), 0.0).sum().item()
         ddp_loss[2] += torch.where(y != loss_fn.ignore_index, 1.0, 0.0).sum().item()
         ddp_loss[3] += jaccard(output, y)
         ddp_loss[4] += 1
+
+        step += 1
 
     dist.all_reduce(ddp_loss, op=dist.ReduceOp.SUM)
     train_acc = ddp_loss[1] / ddp_loss[2] 
