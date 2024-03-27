@@ -27,13 +27,13 @@ def wandb_setup(args):
     )
 
 
-def train_ddp(rank, device, epoch, model, loader, loss_fn, optimizer):
+def train_ddp(rank, device, epoch, model, loader, loss_fn, optimizer, accumulate=2):
     jaccard = None
+    step = 0
     ddp_loss = torch.zeros(5).to(device)
     model.train()
     for X, y in loader:
         X, y = X.to(device), y.to(device)
-        optimizer.zero_grad()
         output = model(X) # ), update_precision=False)
 
         if jaccard is None:
@@ -45,17 +45,19 @@ def train_ddp(rank, device, epoch, model, loader, loss_fn, optimizer):
 
         loss = loss_fn(output, y.squeeze().type(torch.int64))
         loss.backward()
-        optimizer.step()
+        if step % accumulate == (accumulate - 1):
+            optimizer.step()
+            optimizer.zero_grad()
         ddp_loss[0] += loss.item()
         ddp_loss[1] += torch.where(y != loss_fn.ignore_index, (output.argmax(1) == y), 0.0).sum().item()
         ddp_loss[2] += torch.where(y != loss_fn.ignore_index, 1.0, 0.0).sum().item()
         ddp_loss[3] += jaccard(output, y)
         ddp_loss[4] += 1
 
-
     dist.all_reduce(ddp_loss, op=dist.ReduceOp.SUM)
     train_acc = ddp_loss[1] / ddp_loss[2] 
     train_loss = ddp_loss[0] / ddp_loss[2]
+    test_jaccard = ddp_loss[3] / ddp_loss[4]
 
     if rank == 0:
 
@@ -84,7 +86,7 @@ def train_ddp(rank, device, epoch, model, loader, loss_fn, optimizer):
         })
 
 
-    return train_acc, train_loss 
+    return train_acc, test_jaccard, train_loss 
 
 
 def test_ddp(rank, device, model, loader, loss_fn):
@@ -108,6 +110,7 @@ def test_ddp(rank, device, model, loader, loss_fn):
 
     test_acc = ddp_loss[1] / ddp_loss[2] 
     test_loss = ddp_loss[0] / ddp_loss[2]
+    test_jaccard = ddp_loss[3] / ddp_loss[4]
 
     if rank == 0:
 
@@ -132,7 +135,7 @@ def test_ddp(rank, device, model, loader, loss_fn):
             'tst_avg_loss': avg_loss
         })
 
-    return test_acc, test_loss
+    return test_acc, test_jaccard, test_loss
 
 
 
@@ -192,7 +195,7 @@ def test(device, model, loader, loss_fn):
 
     print('\tAccuracy: {:.2f}% \tJaccard: {:.2f} \tAverage Loss: {:.6f}'
             .format( 
-                    100*(ddp_loss[1] / ddp_loss[2]), 
+                    100 * (ddp_loss[1] / ddp_loss[2]), 
                     ddp_loss[3] / ddp_loss[4],
                     ddp_loss[0] / ddp_loss[2])
                     )
