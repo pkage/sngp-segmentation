@@ -51,8 +51,10 @@ def training_process(args):
         transforms.Resize(256),
         transforms.CenterCrop(224),
         transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], 
-                         std=[0.229, 0.224, 0.225])
+        transforms.Normalize(
+            mean=[0.485, 0.456, 0.406], 
+            std=[0.229, 0.224, 0.225]
+        )
     ])
 
     target_trans = transforms.Compose([
@@ -79,16 +81,26 @@ def training_process(args):
     # target_encoder = load_pretrained_model('./in1k_vith14_ep300.yaml', '../models/IN1K-vit.h.14-300e.pth.tar', 0)
 
 
-    model = SNGP_probe(target_encoder, 1280, num_classes, 14).to(device)
+    model = SNGP_probe(
+        target_encoder,
+        1280,
+        num_classes,
+        14
+    ).to(device)
 
     # model = torch.hub.load('mateuszbuda/brain-segmentation-pytorch', 'unet', in_channels=3, out_channels=num_classes, init_features=32, pretrained=False).to(device)
 
-    model = DDP(model, device_ids=[device], find_unused_parameters=True)
+    model = DDP(
+        model,
+        device_ids=[device],
+        find_unused_parameters=True
+    )
 
     loss_fn = torch.nn.CrossEntropyLoss(ignore_index=255)
-    optimizer = optim.Adam(model.parameters(), lr=args.learning_rate)
-
-
+    optimizer = optim.Adam(
+        model.parameters(),
+        lr=args.learning_rate
+    )
 
     for epoch in range(args.epochs):
         train_ddp(

@@ -35,8 +35,14 @@ def train_ddp(rank, device, epoch, model, loader, loss_fn, optimizer):
         X, y = X.to(device), y.to(device)
         optimizer.zero_grad()
         output = model(X) # ), update_precision=False)
+
         if jaccard is None:
-            jaccard = JaccardIndex(task="multiclass", num_classes=output.shape[1], ignore_index=255).to(device)
+            jaccard = JaccardIndex(
+                task="multiclass",
+                num_classes=output.shape[1],
+                ignore_index=255
+            ).to(device)
+
         loss = loss_fn(output, y.squeeze().type(torch.int64))
         loss.backward()
         optimizer.step()
