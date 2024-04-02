@@ -1,6 +1,7 @@
 # adapted from https://github.com/alartum/sngp-pytorch with minor fixes by Jay Rothenbeger
 from collections import OrderedDict
 import math
+from copy import deepcopy as copy
 
 import torch
 import torch.nn as nn
@@ -219,11 +220,42 @@ class SNGP_probe(nn.Module):
         x = self.logits(x, with_variance=with_variance, update_precision=update_precision)
         x = x.permute(0, 3, 1, 2) # b, c, w, h
         return x
-            
+
+def linearleaves(module):
+    # returns a list of pairs of (parent, submodule_name) pairs for all submodule leaves of the current module
+    if isinstance(module, torch.nn.Linear):
+        return [(module, None)]
+
+    linear_children = []
+    for name, mod in module.named_modules():
+        if isinstance(mod, torch.nn.Linear):
+            linear_children.append((name, module))
+    return linear_children
+        
+
+def getattrrecur(mod, s):
+    s = s.split('.')
+    for substr in s:
+        mod = getattr(mod, substr)
+    return mod
+
+
+def setattrrecur(mod, s, value):
+    s = s.split('.')
+    for substr in s[:-1]:
+        mod = getattr(mod, substr)
+    setattr(mod, s[-1], value)
+
+
 class SNGP_FPFT(nn.Module):
     def __init__(self, probe):
         super(SNGP_probe, self).__init__()
-        self.backbone =  probe.backbone
+        backbone = copy(probe.backbone)
+
+        for linear in linearleaves(backbone):
+            setattrrecur(backbone, linear, torch.nn.utils.spectral_norm(getattrrecur(linear)))
+
+        self.backbone =  backbone
         self.patch_size =  probe.patch_size
         self.linear = probe.linear
         self.logits = probe.logits
@@ -237,3 +269,4 @@ class SNGP_FPFT(nn.Module):
         x = self.logits(x, with_variance=with_variance, update_precision=update_precision)
         x = x.permute(0, 3, 1, 2) # b, c, w, h
         return x
+
