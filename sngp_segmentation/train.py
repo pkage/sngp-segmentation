@@ -121,3 +121,6 @@ def training_process(args):
             loss_fn
         )
 
+        if get_rank() == 0:
+            torch.save(model.module.state_dict(), f'checkpoints/ijepa_epoch{epoch}.pth')
+
