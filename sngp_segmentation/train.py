@@ -66,6 +66,10 @@ def training_process(args):
     # load the voc file into our scratch space
     shutil.copy(args.voc, os.environ['LSCRATCH'])
 
+    checkpoint_path = os.path.join(os.environ['LSCRATCH'], 'checkpoitns')
+    if not os.path.exists(checkpoint_path):
+        os.mkdir(checkpoint_path)
+
     ds_train = torchvision.datasets.VOCSegmentation(os.environ['LSCRATCH'], image_set='train', transform=trans, target_transform=target_trans, download=True)
     loader_train = DataLoader(ds_train, batch_size=args.batch_size, pin_memory=True, shuffle=True, num_workers=12)
 
@@ -121,6 +125,9 @@ def training_process(args):
             loss_fn
         )
 
-        if get_rank() == 0:
-            torch.save(model.module.state_dict(), f'checkpoints/ijepa_epoch{epoch}.pth')
+        if get_rank() == 0 and epoch % 10 == 0:
+            torch.save(
+                model.module.state_dict(), 
+                os.path.join(checkpoint_path, f'ijepa_epoch{epoch}.pth')
+            )
 

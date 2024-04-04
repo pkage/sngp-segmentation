@@ -54,6 +54,6 @@ poetry run torchrun \
     --vit-ckpt ./IN1K-vit.h.14-300e.pth.tar \
     --batch_size 32 \
     --test_batch_size 32 \
-    --epochs 400 \
+    --epochs 200 \
     --learning_rate 0.001 # 1e-3
 
