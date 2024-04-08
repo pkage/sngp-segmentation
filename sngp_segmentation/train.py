@@ -127,7 +127,9 @@ def training_process(args):
 
         if get_rank() == 0 and epoch % 10 == 0:
             torch.save(
-                model.module.state_dict(), 
-                os.path.join(checkpoint_path, f'ijepa_epoch{epoch}.pth')
+                model.state_dict(), # technically this should be "model.module.state_dict", however the 
+                                    # load_checkpoint code expects to have to strip the .module DDP cruft
+                                    # so we're gonna leave it in
+                os.path.join(checkpoint_path, f'ijepa_sngp_epoch{epoch}.pth')
             )
 
