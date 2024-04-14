@@ -12,6 +12,9 @@ def cleanup():
     dist.destroy_process_group()
 
 def get_rank():
+    if not 'RANK' in os.environ:
+        print('warning: no rank information in environment')
+        return 0
     return int(os.environ['RANK'])
 
 def wandb_setup(args):
