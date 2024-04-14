@@ -3,24 +3,66 @@
 # this way, we don't have to produce all the representations on-the-fly,
 # and save our VRAM for other models
 
-import torch
-import os
 import copy
+import os
 from pathlib import Path
-from .ijepa import init_model, load_checkpoint
-import yaml
-import torchvision.datasets
-from torchvision import transforms
-from torchvision.transforms.functional import InterpolationMode
-from .utils import LabelToTensor, get_rank
 import shutil
+
+import h5py
+import torch
+from torch.utils.data import DataLoader
+from torchvision import transforms
+import torchvision.datasets
+from torchvision.transforms.functional import InterpolationMode
+from tqdm import tqdm
+import yaml
+
+from .ijepa import init_model
+from .utils import LabelToTensor, get_rank
+
+def load_checkpoint_for_projection(
+    device,
+    r_path,
+    encoder
+):
+    try:
+        checkpoint = torch.load(r_path, map_location=torch.device('cpu'))
+        
+        # if 'epoch' in checkpoint:
+        #     epoch = checkpoint['epoch']
+        # else:
+        #     epoch = 0
+        #     print('no epoch info, assuming epoch zero')
+        # -- loading encoder
+
+        
+        # manually rebuild the checkpoint dictionary
+        pretrained_dict = {}
+        for key, val in checkpoint.items():
+            if not key.startswith('module.backbone'):
+                continue
+
+            key = key.replace('module.backbone.', '')
+            pretrained_dict[key] = val
+
+
+        msg = encoder.load_state_dict(pretrained_dict)
+
+        print(f'loaded pretrained encoder with msg: {msg}')
+        del checkpoint # do we need this?
+        return encoder
+
+    except Exception as e:
+        raise
+
+    # return encoder, predictor, target_encoder, epoch
 
 
 def load_ijepa_without_probe(checkpoint_path: Path, yaml_path: Path, device: str):
     with open(yaml_path, 'rb') as fp:
         yam = yaml.load(fp, yaml.Loader)
 
-    encoder, predictor = init_model(
+    encoder, _ = init_model(
             device=device,
             patch_size=yam['mask']['patch_size'],
             crop_size=yam['data']['crop_size'],
@@ -28,19 +70,42 @@ def load_ijepa_without_probe(checkpoint_path: Path, yaml_path: Path, device: str
             pred_emb_dim=yam['meta']['pred_emb_dim'],
             model_name=yam['meta']['model_name'])
 
-    target_encoder = copy.deepcopy(encoder)
-
-    # i'm betting that this just ignores the SNGP probe trained onto the model
-    encoder, predictor, target_encoder, epoch = load_checkpoint(
+    encoder = load_checkpoint_for_projection(
         device,
         checkpoint_path,
-        encoder,
-        predictor,
-        target_encoder,
+        encoder
     )
     
-    return target_encoder
+    return encoder
 
+
+def project_loader(model, loader, output_filename, device):
+    features  = []
+    labels    = []
+    encodings = []
+
+    for X, y in tqdm(loader):
+        with torch.inference_mode():
+            X, y = X.to(device), y.to(device)
+            encoded = model(X)
+
+        features.append(X.to('cpu'))
+        labels.append(y.to('cpu'))
+        encodings.append(encoded.to('cpu'))
+
+    print('concatenating tensors...')
+    features = torch.cat(features, dim=0)
+    labels = torch.cat(labels, dim=0)
+    encodings = torch.cat(encodings, dim=0)
+
+    print(f'creating h5 dataset at {output_filename}...')
+    with h5py.File(output_filename, 'w') as f:
+        f.create_dataset('features', data=features.numpy())
+        print('    wrote features')
+        f.create_dataset('labels', data=labels.numpy())
+        print('    wrote labels')
+        f.create_dataset('encodings', data=labels.numpy())
+        print('    wrote encodings')
 
 def load_and_project(checkpoint_path: Path, yaml_path: Path, voc_path: Path):
     device = get_rank() % torch.cuda.device_count()
@@ -62,7 +127,7 @@ def load_and_project(checkpoint_path: Path, yaml_path: Path, voc_path: Path):
     ])
 
     # load the model itself
-    target_encoder = load_pretrained_model(
+    target_encoder = load_ijepa_without_probe(
         checkpoint_path,
         yaml_path,
         0
@@ -71,21 +136,28 @@ def load_and_project(checkpoint_path: Path, yaml_path: Path, voc_path: Path):
 
     # initialize the dataset
     shutil.copy(voc_path, os.environ['LSCRATCH'])
-    voc_seg_trn = torchvision.datasets.VOCSegmentation(
-        os.environ['LSCRATCH'], 
-        image_set='train',
-        transform=trans,
-        target_transform=target_trans,
-        download=True
-    )
-    voc_seg_tst = torchvision.datasets.VOCSegmentation(
-        os.environ['LSCRATCH'], 
-        image_set='test',
-        transform=trans,
-        target_transform=target_trans,
-        download=True
-    )
 
+    for ds_key in ['train', 'trainval', 'val']:
+        print(f'projecting VOC split {ds_key}')
+
+        voc_seg = torchvision.datasets.VOCSegmentation(
+            os.environ['LSCRATCH'], 
+            image_set=ds_key,
+            transform=trans,
+            target_transform=target_trans,
+            download=True
+        )
+        loader = DataLoader(voc_seg, batch_size=4, pin_memory=True, shuffle=False, num_workers=12)
     
+        project_loader(
+            target_encoder,
+            loader,
+            f'voc_projection_{ds_key}.h5',
+            device
+        )
+
+        print(f'completed projection of {ds_key}')
+ 
+
 
 

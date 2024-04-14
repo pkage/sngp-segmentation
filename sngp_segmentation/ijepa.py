@@ -659,6 +659,7 @@ def load_checkpoint(
         del checkpoint
 
     except Exception as e:
+        raise
         logger.info(f'Encountered exception when loading checkpoint {e}')
         epoch = 0
 

@@ -24,7 +24,7 @@ def parse_args():
     #                     help='number of epochs to train for without improvement (default: %(default)s)')
 
     parser.add_argument('--voc', help='VOC file', default='./VOCtrainval_11-May-2012.tar')
-    parser.add_argument('--ckpt', help='ViT-SNGP checkpoint', default='./ijepa')
+    parser.add_argument('--ckpt', help='ViT-SNGP checkpoint', default='./ijepa_sngp_epoch190.pth')
     parser.add_argument('--vit-cfg', help='ViT configuration', default='./in1k_vith14_ep300.yaml')
 
     return parser.parse_args()
