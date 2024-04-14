@@ -5,6 +5,8 @@ stderr.txt
 out.txt
 err.txt
 *.pth
+*.tar
+*.tar.gz
 
 ### Python
 # Byte-compiled / optimized / DLL files
