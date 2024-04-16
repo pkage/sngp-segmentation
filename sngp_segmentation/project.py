@@ -79,14 +79,14 @@ def load_ijepa_without_probe(checkpoint_path: Path, yaml_path: Path, device: str
     return encoder
 
 
-def project_loader(model, loader, output_filename, device):
+def project_loader(model, loader, device):
     features  = []
     labels    = []
     encodings = []
 
     for X, y in tqdm(loader):
         with torch.inference_mode():
-            X, y = X.to(device), y.to(device)
+            X = X.to(device)
             encoded = model(X)
 
         features.append(X.to('cpu'))
@@ -98,14 +98,8 @@ def project_loader(model, loader, output_filename, device):
     labels = torch.cat(labels, dim=0)
     encodings = torch.cat(encodings, dim=0)
 
-    print(f'creating h5 dataset at {output_filename}...')
-    with h5py.File(output_filename, 'w') as f:
-        f.create_dataset('features', data=features.numpy())
-        print('    wrote features')
-        f.create_dataset('labels', data=labels.numpy())
-        print('    wrote labels')
-        f.create_dataset('encodings', data=labels.numpy())
-        print('    wrote encodings')
+    return features, labels, encodings
+
 
 def load_and_project(checkpoint_path: Path, yaml_path: Path, voc_path: Path):
     device = get_rank() % torch.cuda.device_count()
@@ -137,27 +131,33 @@ def load_and_project(checkpoint_path: Path, yaml_path: Path, voc_path: Path):
     # initialize the dataset
     shutil.copy(voc_path, os.environ['LSCRATCH'])
 
-    for ds_key in ['train', 'trainval', 'val']:
-        print(f'projecting VOC split {ds_key}')
+    output_filename = 'voc_projection.h5'
+    print(f'creating h5 dataset at {output_filename}...')
+    with h5py.File(output_filename, 'w') as f:
+        for ds_key in ['train', 'trainval', 'val']:
+            print(f'projecting VOC split {ds_key}')
 
-        voc_seg = torchvision.datasets.VOCSegmentation(
-            os.environ['LSCRATCH'], 
-            image_set=ds_key,
-            transform=trans,
-            target_transform=target_trans,
-            download=True
-        )
-        loader = DataLoader(voc_seg, batch_size=4, pin_memory=True, shuffle=False, num_workers=12)
-    
-        project_loader(
-            target_encoder,
-            loader,
-            f'voc_projection_{ds_key}.h5',
-            device
-        )
+            voc_seg = torchvision.datasets.VOCSegmentation(
+                os.environ['LSCRATCH'], 
+                image_set=ds_key,
+                transform=trans,
+                target_transform=target_trans,
+                download=True
+            )
+            loader = DataLoader(voc_seg, batch_size=4, pin_memory=True, shuffle=False, num_workers=12)
 
-        print(f'completed projection of {ds_key}')
- 
+            features, labels, encodings = project_loader(
+                target_encoder,
+                loader,
+                device
+            )
 
+            f.create_dataset(f'{ds_key}.features', data=features.numpy())
+            f.create_dataset(f'{ds_key}.labels', data=labels.numpy())
+            f.create_dataset(f'{ds_key}.encodings', data=encodings.numpy())
+
+            print(f'completed projection of {ds_key}')
+
+    print(f'dataset projection complete.')
 
 
