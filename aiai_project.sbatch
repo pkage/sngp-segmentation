@@ -24,9 +24,9 @@ cd $PROJ_DIR
 poetry install
 
 # check that we've got our vit model checkpoint....
-if ! [ -f ./IN1K-vit.h.14-300e.pth.tar ]; then
-    echo "vit not found, downloading..."
-    curl -L -O -J https://dl.fbaipublicfiles.com/ijepa/IN1K-vit.h.14-300e.pth.tar
+if ! [ -f ./ijepa_sngp_epoch190.pth ]; then
+    echo "vit checkpoint not found, downloading..."
+    curl -L -O -J https://kage.zip/vault/data/ijepa-seg/ijepa_sngp_epoch190.pth
 else
     echo "vit has been downloaded already"
 fi
@@ -39,21 +39,7 @@ else
     echo "voc has been downloaded already"
 fi
 
-# perf tuning
-export OMP_NUM_THREADS=16
-
-# secrets -- wandb setup
-source .env
-
 # kickoff
-echo "beginning training..."
-poetry run wandb offline
-poetry run torchrun \
-    --nproc_per_node 1 \
-    main_ddp.py \
-    --vit-ckpt ./IN1K-vit.h.14-300e.pth.tar \
-    --batch_size 32 \
-    --test_batch_size 32 \
-    --epochs 200 \
-    --learning_rate 0.001 # 1e-3
+echo "beginning projection..."
+poetry run python main_project.py
 
