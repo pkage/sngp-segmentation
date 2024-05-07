@@ -8,6 +8,7 @@ err.txt
 *.tar
 *.tar.gz
 *.h5
+*.npy
 *.json
 
 ### Python
