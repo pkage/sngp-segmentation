@@ -5,6 +5,8 @@ import torch.utils.checkpoint
 import torch.nn as nn
 import torch.nn.functional as F
 
+from copy import deepcopy as copy
+
 
 class DoubleConv(nn.Module):
     '''(convolution => [BN] => ReLU) * 2'''
@@ -125,3 +127,94 @@ class UNet(nn.Module):
         self.up3 = torch.utils.checkpoint(self.up3)
         self.up4 = torch.utils.checkpoint(self.up4)
         self.outc = torch.utils.checkpoint(self.outc)
+
+
+class Stacked_UNet_Ensemble(torch.nn.Module):
+    def __init__(self, n_channels, n_classes, bilinear=False, members=10):
+        super().__init__()
+        self.members = members
+
+        self.ensemble = [UNet(n_channels, n_classes, bilinear) for member in range(members)]
+        """
+
+        stacked module state parameters and buffers are tensors not nn modules
+        when sending this module to a device, these will not be sent
+
+        """
+        self.params, self.buffers = torch.func.stack_module_state(self.ensemble)
+
+        for param in self.params:
+            self.params[param] = torch.nn.Parameter(self.params[param])
+            self.register_parameter(param.replace('.', '#'), self.params[param])
+
+        """
+
+        meta tensor models are nn modules, so they will be sent to device with
+        this one.  As such we must wrap them with a python class to avoid them
+        being sent to a non-meta device, which will cause an error.
+
+        """
+        self.base_model = [copy(self.ensemble[0]).to('meta')]
+
+    def ensemble_wrapper(self, params, buffers, data):
+        return torch.func.functional_call(self.base_model[0], (params, buffers), (data,))
+
+    def ensemble_fwd(self, data):
+        return torch.vmap(self.ensemble_wrapper, randomness='same')(self.params, self.buffers, data.unsqueeze(0).expand(self.members, -1, -1))
+
+    def forward(self, x, with_variance=False):
+        predictions = self.ensemble_fwd(x)
+
+        # based on: https://arxiv.org/abs/2006.10108
+
+        if with_variance:
+            # return the prediction with the uncertainty value
+            pred = (torch.sum(predictions, 0) / predictions.shape[0]) / (1 + (0.3*torch.var(predictions, 0)))**(0.5)
+            pred_idx = torch.argmax(pred, -1)
+            smax = torch.nn.functional.softmax(predictions, -1)
+            unc = 1.0 - torch.gather(smax, -1, pred_idx.unsqueeze(-1)).squeeze()
+            return pred, unc
+        else:
+            # return the calibrated prediction
+            return (torch.sum(predictions, 0) / self.members) / (1 + (0.3*torch.var(predictions, 0)))**(0.5)
+
+    def to(self, device):
+      super().to(device)
+
+      # we overrode this method to send our parameters and buffers
+      # it must be done with no grad to avoid non-leaf tensor errors
+      with torch.no_grad():
+        for param in self.params:
+            # must set the requires grad or it will be false
+            param_requires_grad = self.params[param].requires_grad
+            self.params[param] = self.params[param].to(device)
+            self.params[param].requires_grad = param_requires_grad
+
+        for buffer in self.buffers:
+            if self.buffers[buffer] is not None:
+              buffer_requires_grad = self.buffers[buffer].requires_grad
+              self.buffers[buffer] = self.buffers[buffer].to(device)
+              self.buffers[buffer].requires_grad = buffer_requires_grad
+
+      return self
+    # overrode this because the other parameters are not updated by optimizer step
+    def parameters(self, recurse: bool = True):
+      return [self.params[param] for param in self.params]
+
+    def buffers(self, recurse: bool = True):
+      return [self.buffers[buffer] for buffer in self.buffers]
+
+    def state_dict(self, *args, **kwargs):
+      state_dict1 = super().state_dict(*args, **kwargs)
+      state_dict1.update({'params': copy(self.params), 'buffers': copy(self.buffers)})
+      return state_dict1
+
+    def load_state_dict(self, state_dict, *args, **kwargs):
+      with torch.no_grad():
+        for param in self.params:
+            self.params[param].data = state_dict['params'][param].data
+
+        self.buffers = state_dict['buffers']
+        del state_dict['params']
+        del state_dict['buffers']
+      super().load_state_dict(state_dict, *args, **kwargs)
