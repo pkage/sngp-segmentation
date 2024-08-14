@@ -167,16 +167,19 @@ class Stacked_UNet_Ensemble(torch.nn.Module):
 
         # based on: https://arxiv.org/abs/2006.10108
 
-        if with_variance:
-            # return the prediction with the uncertainty value
-            pred = (torch.sum(predictions, 0) / predictions.shape[0]) / (1 + (0.3*torch.var(predictions, 0)))**(0.5)
-            pred_idx = torch.argmax(pred, -1)
-            smax = torch.nn.functional.softmax(predictions, -1)
-            unc = 1.0 - torch.gather(smax, -1, pred_idx.unsqueeze(-1)).squeeze()
-            return pred, unc
+        if not self.train:
+          if with_variance:
+              # return the prediction with the uncertainty value
+              pred = (torch.sum(predictions, 0) / predictions.shape[0]) / (1 + (0.3*torch.var(predictions, 0)))**(0.5)
+              pred_idx = torch.argmax(pred, -1)
+              smax = torch.nn.functional.softmax(predictions, -1)
+              unc = 1.0 - torch.gather(smax, -1, pred_idx.unsqueeze(-1)).squeeze()
+              return pred, unc
+          else:
+              # return the calibrated prediction
+              return (torch.sum(predictions, 0) / self.members) / (1 + (0.3*torch.var(predictions, 0)))**(0.5)
         else:
-            # return the calibrated prediction
-            return (torch.sum(predictions, 0) / self.members) / (1 + (0.3*torch.var(predictions, 0)))**(0.5)
+          return torch.sum(predictions, 0) / self.members
 
     def to(self, device):
       super().to(device)
