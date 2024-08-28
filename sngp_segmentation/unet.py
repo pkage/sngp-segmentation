@@ -369,3 +369,29 @@ class RandomFeatureGaussianProcess(nn.Module):
     def reset_covariance(self):
         self.is_fitted = False
         self.covariance.zero_()
+
+class SNGPUnet(nn.Module):
+    def __init__(self, n_channels, n_classes, bilinear=False):
+
+        module = UNet(n_channels, 64, bilinear)
+        
+        for name, mod in convleaves(module):
+            setattrrecur(module, name, spectral_norm(getattrrecur(module, name)))
+
+        self.module = module
+
+        self.rfgp = RandomFeatureGaussianProcess(
+                                            in_features=64,
+                                            out_features=n_classes,
+                                            backbone=self.module,
+                                            n_inducing=1024,
+                                            momentum = 0.99,
+                                            ridge_penalty = 1e-6,
+                                            activation = Cos(), # torch.nn.Sigmoid(),
+                                            verbose = False,
+                                            )
+        
+    def forward(self, x, with_variance: bool = False, update_precision: bool = True):
+        return self.rfgp(x, with_variance, update_precision)
+
+
