@@ -217,3 +217,29 @@ class LabelToTensor:
         y = torch.tensor(np.array(y)).type(torch.int64)
         y = torch.where(y == self.nothing_class, 255, y)
         return y
+
+
+def convleaves(module):
+    # returns a list of pairs of (parent, submodule_name) pairs for all submodule leaves of the current module
+    if isinstance(module, torch.nn.Conv2d):
+        return [(module, None)]
+
+    conv_children = []
+    for name, mod in module.named_modules():
+        if isinstance(mod, torch.nn.Conv2d):
+            conv_children.append((name, module))
+    return conv_children
+        
+
+def getattrrecur(mod, s):
+    s = s.split('.')
+    for substr in s:
+        mod = getattr(mod, substr)
+    return mod
+
+
+def setattrrecur(mod, s, value):
+    s = s.split('.')
+    for substr in s[:-1]:
+        mod = getattr(mod, substr)
+    setattr(mod, s[-1], value)
