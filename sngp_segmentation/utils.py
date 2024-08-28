@@ -4,6 +4,8 @@ import numpy as np
 from torchmetrics import JaccardIndex
 import wandb
 import os
+from torch.util.data import DataLoader
+from tqdm import tqdm
 
 def setup():
     dist.init_process_group("nccl", rank=int(os.environ['RANK']), world_size=int(os.environ['WORLD_SIZE']))
@@ -243,3 +245,25 @@ def setattrrecur(mod, s, value):
     for substr in s[:-1]:
         mod = getattr(mod, substr)
     setattr(mod, s[-1], value)
+
+
+def get_uncertainty(ds, model, batch_size=1024, verbose=True):
+    rank = int(os.environ['RANK'])
+    device = rank % torch.cuda.device_count()
+    dataloader = DataLoader(ds, batch_size=batch_size)
+    uncs = []
+    preds = []
+
+    for (X, y) in tqdm(dataloader, total=len(dataloader), disable=not verbose):
+        with torch.no_grad():
+            pred, unc = model(X.to(device), with_variance=True)
+        uncs.append(unc.cpu())
+        preds.append(pred.cpu())
+
+    uncs = torch.cat(uncs)
+    preds = torch.cat(preds)
+
+    uncs = (uncs - uncs.min())
+    uncs = (uncs / uncs.max()) ** 0.5
+
+    return preds.detach().cpu(), uncs.detach().cpu()
