@@ -22,9 +22,9 @@ def parse_args():
     parser.add_argument('-p', '--patience', type=float, default=64,
                         help='number of epochs to train for without improvement (default: %(default)s)')
 
-    parser.add_argument('--voc', help='VOC file', default='./VOCtrainval_11-May-2012.tar')
-    parser.add_argument('--vit-ckpt', help='ViT checkpoint', default='../models/IN1K-vit.h.14-300e.pth.tar') # defaults to not breaking jay's code
-    parser.add_argument('--vit-cfg', help='ViT configuration', default='./in1k_vith14_ep300.yaml')
+    # parser.add_argument('--voc', help='VOC file', default='./VOCtrainval_11-May-2012.tar')
+    # parser.add_argument('--vit-ckpt', help='ViT checkpoint', default='../models/IN1K-vit.h.14-300e.pth.tar') # defaults to not breaking jay's code
+    # parser.add_argument('--vit-cfg', help='ViT configuration', default='./in1k_vith14_ep300.yaml')
 
     return parser.parse_args()
 
