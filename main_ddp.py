@@ -15,7 +15,7 @@ def parse_args():
                         help='training epochs (default: %(default)s)')
     parser.add_argument('-b', '--batch_size', type=int, default=64, 
                         help='batch size for training (default: %(default)s)')
-    parser.add_argument('-tb', '--test_batch_size', type=int, default=128, 
+    parser.add_argument('-tb', '--test_batch_size', type=int, default=64, 
                         help=' batch size for testing (default: %(default)s)')
     parser.add_argument('-lr', '--learning_rate', type=float, default=1e-4,
                         help='learning rate for Adam (default: %(default)s)')
