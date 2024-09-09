@@ -58,7 +58,7 @@ def load_pretrained_model(yaml_path, checkpoint_path, device):
 def training_process(args):
     num_classes = 20 + 1
     device = int(os.environ['RANK']) % torch.cuda.device_count()
-    torch.cuda.set_current_device(device)
+    torch.cuda.set_device(device)
 
     trans = transforms.Compose([
         transforms.Resize(256),
@@ -76,11 +76,12 @@ def training_process(args):
         LabelToTensor(255)
     ])
 
+    checkpoint_path = os.path.join(os.environ['LSCRATCH'], 'checkpoints')
+
     if device == 0:
         # load the voc file into our scratch space
         shutil.copy(args.voc, os.environ['LSCRATCH'])
 
-        checkpoint_path = os.path.join(os.environ['LSCRATCH'], 'checkpoints')
         if not os.path.exists(checkpoint_path):
             os.mkdir(checkpoint_path)
     else:
