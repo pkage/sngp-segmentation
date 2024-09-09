@@ -1,6 +1,7 @@
 import copy
 import os
 import shutil
+import time
 
 import torch
 from torch.nn.parallel import DistributedDataParallel as DDP
@@ -57,6 +58,7 @@ def load_pretrained_model(yaml_path, checkpoint_path, device):
 def training_process(args):
     num_classes = 20 + 1
     device = int(os.environ['RANK']) % torch.cuda.device_count()
+    torch.cuda.set_current_device(device)
 
     trans = transforms.Compose([
         transforms.Resize(256),
@@ -74,12 +76,16 @@ def training_process(args):
         LabelToTensor(255)
     ])
 
-    # load the voc file into our scratch space
-    shutil.copy(args.voc, os.environ['LSCRATCH'])
+    if device == 0:
+        # load the voc file into our scratch space
+        shutil.copy(args.voc, os.environ['LSCRATCH'])
 
-    checkpoint_path = os.path.join(os.environ['LSCRATCH'], 'checkpoitns')
-    if not os.path.exists(checkpoint_path):
-        os.mkdir(checkpoint_path)
+        checkpoint_path = os.path.join(os.environ['LSCRATCH'], 'checkpoints')
+        if not os.path.exists(checkpoint_path):
+            os.mkdir(checkpoint_path)
+    else:
+        while not os.path.exists(checkpoint_path):
+            time.sleep(10)
 
     ds_train = torchvision.datasets.VOCSegmentation(os.environ['LSCRATCH'], image_set='train', transform=trans, target_transform=target_trans, download=True)
     loader_train = DataLoader(ds_train, batch_size=args.batch_size, pin_memory=True, shuffle=True, num_workers=12)
@@ -229,7 +235,7 @@ def fpft_training_process(args, state_dict=None):
         )
 
     return model.state_dict()
-
+"""
         if get_rank() == 0 and epoch % 10 == 0:
             torch.save(
                 model.state_dict(), # technically this should be "model.module.state_dict", however the 
@@ -237,4 +243,4 @@ def fpft_training_process(args, state_dict=None):
                                     # so we're gonna leave it in
                 os.path.join(checkpoint_path, f'ijepa_sngp_epoch{epoch}.pth')
             )
-
+"""
