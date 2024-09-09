@@ -1,6 +1,7 @@
 # code adapted from https://github.com/milesial/Pytorch-UNet
 
 import torch
+import torchvision
 import torch.utils.checkpoint
 import torch.nn as nn
 import torch.nn.functional as F
@@ -273,6 +274,7 @@ class RandomFeatureGaussianProcess(nn.Module):
             OrderedDict(
                 [
                     ("backbone", backbone),
+                    ("permute", torchvision.ops.Permute([0, 2, 3, 1])),
                     ("projection", projection),
                     ("activation", activation),
                 ]
@@ -301,12 +303,6 @@ class RandomFeatureGaussianProcess(nn.Module):
             requires_grad=False,
         )
 
-    def unflatten(self, x: torch.Tensor):
-        h = w = int(x.shape[0]**.5)
-        assert h * w == x.shape[0], (h, w, x.shape)
-
-        x = x.reshape(shape=(x.shape[0], h, w, 1, 1, x.shape[-1])).squeeze(3).squeeze(3)
-
 
     def forward(
         self,
@@ -315,14 +311,14 @@ class RandomFeatureGaussianProcess(nn.Module):
         update_precision: bool = True,
     ):
 
-        features = self.rff(X.permute(0, 2, 3, 1))
+        features = self.rff(X)
 
         if update_precision:
             self.update_precision_(features)
 
         logits = self.weight(features)
         if not with_variance and not self.is_fitted:
-            return logits
+            return logits.permute(0, 3, 2, 1)
 
         if not self.is_fitted:
             raise ValueError(
@@ -361,7 +357,7 @@ class RandomFeatureGaussianProcess(nn.Module):
 
     def update_precision(self, X: torch.Tensor):
         with torch.no_grad():
-            features = self.rff(X.permute(0, 2, 3, 1))
+            features = self.rff(X)
 
             features_list = [torch.zeros_like(features) for i in range(int(os.environ['WORLD_SIZE']))]
             torch.distributed.all_gather(features_list, features)
@@ -382,7 +378,7 @@ class RandomFeatureGaussianProcess(nn.Module):
 
 class SNGPUnet(nn.Module):
     def __init__(self, n_channels, n_classes, bilinear=False):
-
+        super().__init__()
         module = UNet(n_channels, 64, bilinear)
         
         for name, mod in convleaves(module):

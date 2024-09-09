@@ -27,6 +27,7 @@ import functools
 
 from .utils import LabelToTensor, test_ddp, train_ddp, get_rank
 from .ijepa import init_model, load_checkpoint
+from .unet import SNGPUnet
 from .sngp import SNGP_probe, SNGP_FPFT
 
 def load_pretrained_model(yaml_path, checkpoint_path, device):
@@ -94,24 +95,11 @@ def training_process(args):
     ds_val = torchvision.datasets.VOCSegmentation(os.environ['LSCRATCH'], image_set='val', transform=trans, target_transform=target_trans, download=True)
     loader_val = DataLoader(ds_val, batch_size=args.test_batch_size, pin_memory=True, shuffle=False, num_workers=12)
 
-    target_encoder = load_pretrained_model(
-        args.vit_cfg,
-        args.vit_ckpt,
-        0
-    )
-    target_encoder.requires_grad = False
-    # target_encoder = load_pretrained_model('./in1k_vith14_ep300.yaml', '../models/IN1K-vit.h.14-300e.pth.tar', 0)
-
-
-    model = SNGP_probe(
-        target_encoder,
-        1280,
+    model = SNGPUnet(
+        3,
         num_classes,
-        14
     ).to(device)
 
-    # model = torch.hub.load('mateuszbuda/brain-segmentation-pytorch', 'unet', in_channels=3, out_channels=num_classes, init_features=32, pretrained=False).to(device)
-    
     model = DDP(
         model,
         device_ids=[device],
