@@ -40,6 +40,14 @@ echo Node IP: $head_node_ip
 . /home/fagg/tf_setup.sh
 conda activate /home/jroth/.conda/envs/torch
 
+# download the voc
+if ! [ -f ./VOCtrainval_11-May-2012.tar ]; then
+    echo "voc not found, downloading..."
+    curl -L -O -J http://host.robots.ox.ac.uk/pascal/VOC/voc2012/VOCtrainval_11-May-2012.tar
+else
+    echo "voc has been downloaded already"
+fi
+
 # secrets -- wandb setup
 source .env
 

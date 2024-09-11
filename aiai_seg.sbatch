@@ -21,7 +21,14 @@ cd $PROJ_DIR
 # load python, ensure the env is installed
 export PATH=/home/s1734411/py3.11.4/bin:$PATH
 cd $PROJ_DIR
-poetry install
+
+# ... and the voc
+if ! [ -f ./VOCtrainval_11-May-2012.tar ]; then
+    echo "voc not found, downloading..."
+    curl -L -O -J http://host.robots.ox.ac.uk/pascal/VOC/voc2012/VOCtrainval_11-May-2012.tar
+else
+    echo "voc has been downloaded already"
+fi
 
 # kickoff
 echo "beginning projection..."
