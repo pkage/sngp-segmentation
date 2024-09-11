@@ -4,8 +4,9 @@ import numpy as np
 from torchmetrics import JaccardIndex
 import wandb
 import os
-from torch.util.data import DataLoader
+from torch.utils.data import DataLoader
 from tqdm import tqdm
+import gc
 
 def setup():
     dist.init_process_group("nccl", rank=int(os.environ['RANK']), world_size=int(os.environ['WORLD_SIZE']))
@@ -23,8 +24,8 @@ def wandb_setup(args):
     if get_rank() != 0:
         print('initing wandb from a non-zero-rank process, weird stuff might happen')
 
-    assert os.environ['WANDB_PROJECT'] is not None
-    assert os.environ['WANDB_API_KEY'] is not None
+    assert os.environ.get('WANDB_PROJECT') is not None
+    assert os.environ.get('WANDB_API_KEY') is not None
 
     wandb.init(
         project=os.environ['WANDB_PROJECT'],
@@ -93,6 +94,8 @@ def train_ddp(rank, device, epoch, model, loader, loss_fn, optimizer, accumulate
             'trn_avg_loss': avg_loss
         })
 
+        gc.collect()
+
 
     return train_acc, test_jaccard, train_loss 
 
@@ -142,6 +145,8 @@ def test_ddp(rank, device, model, loader, loss_fn):
             'tst_jaccard': jaccard,
             'tst_avg_loss': avg_loss
         })
+
+        gc.collect()
 
     return test_acc, test_jaccard, test_loss
 

@@ -1,6 +1,7 @@
 import copy
 import os
 import shutil
+import time
 
 import torch
 from torch.nn.parallel import DistributedDataParallel as DDP
@@ -26,6 +27,7 @@ import functools
 
 from .utils import LabelToTensor, test_ddp, train_ddp, get_rank
 from .ijepa import init_model, load_checkpoint
+from .unet import SNGPUnet
 from .sngp import SNGP_probe, SNGP_FPFT
 
 def load_pretrained_model(yaml_path, checkpoint_path, device):
@@ -57,6 +59,7 @@ def load_pretrained_model(yaml_path, checkpoint_path, device):
 def training_process(args):
     num_classes = 20 + 1
     device = int(os.environ['RANK']) % torch.cuda.device_count()
+    torch.cuda.set_device(device)
 
     trans = transforms.Compose([
         transforms.Resize(256),
@@ -74,12 +77,17 @@ def training_process(args):
         LabelToTensor(255)
     ])
 
-    # load the voc file into our scratch space
-    shutil.copy(args.voc, os.environ['LSCRATCH'])
+    checkpoint_path = os.path.join(os.environ['LSCRATCH'], 'checkpoints')
 
-    checkpoint_path = os.path.join(os.environ['LSCRATCH'], 'checkpoitns')
-    if not os.path.exists(checkpoint_path):
-        os.mkdir(checkpoint_path)
+    if device == 0:
+        # load the voc file into our scratch space
+        shutil.copy(args.voc, os.environ['LSCRATCH'])
+
+        if not os.path.exists(checkpoint_path):
+            os.mkdir(checkpoint_path)
+    else:
+        while not os.path.exists(checkpoint_path):
+            time.sleep(10)
 
     ds_train = torchvision.datasets.VOCSegmentation(os.environ['LSCRATCH'], image_set='train', transform=trans, target_transform=target_trans, download=True)
     loader_train = DataLoader(ds_train, batch_size=args.batch_size, pin_memory=True, shuffle=True, num_workers=12)
@@ -87,24 +95,11 @@ def training_process(args):
     ds_val = torchvision.datasets.VOCSegmentation(os.environ['LSCRATCH'], image_set='val', transform=trans, target_transform=target_trans, download=True)
     loader_val = DataLoader(ds_val, batch_size=args.test_batch_size, pin_memory=True, shuffle=False, num_workers=12)
 
-    target_encoder = load_pretrained_model(
-        args.vit_cfg,
-        args.vit_ckpt,
-        0
-    )
-    target_encoder.requires_grad = False
-    # target_encoder = load_pretrained_model('./in1k_vith14_ep300.yaml', '../models/IN1K-vit.h.14-300e.pth.tar', 0)
-
-
-    model = SNGP_probe(
-        target_encoder,
-        1280,
+    model = SNGPUnet(
+        3,
         num_classes,
-        14
     ).to(device)
 
-    # model = torch.hub.load('mateuszbuda/brain-segmentation-pytorch', 'unet', in_channels=3, out_channels=num_classes, init_features=32, pretrained=False).to(device)
-    
     model = DDP(
         model,
         device_ids=[device],
@@ -229,7 +224,7 @@ def fpft_training_process(args, state_dict=None):
         )
 
     return model.state_dict()
-
+"""
         if get_rank() == 0 and epoch % 10 == 0:
             torch.save(
                 model.state_dict(), # technically this should be "model.module.state_dict", however the 
@@ -237,4 +232,4 @@ def fpft_training_process(args, state_dict=None):
                                     # so we're gonna leave it in
                 os.path.join(checkpoint_path, f'ijepa_sngp_epoch{epoch}.pth')
             )
-
+"""

@@ -1,6 +1,7 @@
 # code adapted from https://github.com/milesial/Pytorch-UNet
 
 import torch
+import torchvision
 import torch.utils.checkpoint
 import torch.nn as nn
 import torch.nn.functional as F
@@ -273,6 +274,7 @@ class RandomFeatureGaussianProcess(nn.Module):
             OrderedDict(
                 [
                     ("backbone", backbone),
+                    ("permute", torchvision.ops.Permute([0, 2, 3, 1])),
                     ("projection", projection),
                     ("activation", activation),
                 ]
@@ -301,13 +303,14 @@ class RandomFeatureGaussianProcess(nn.Module):
             requires_grad=False,
         )
 
+
     def forward(
         self,
         X: torch.Tensor,
         with_variance: bool = False,
         update_precision: bool = True,
     ):
-    
+
         features = self.rff(X)
 
         if update_precision:
@@ -315,23 +318,26 @@ class RandomFeatureGaussianProcess(nn.Module):
 
         logits = self.weight(features)
         if not with_variance and not self.is_fitted:
-            return logits
-        
+            return logits.permute(0, 3, 2, 1)
+
         if not self.is_fitted:
             raise ValueError(
                 "`compute_covariance` should be called before setting "
                 "`with_variance` to True"
             )
         with torch.no_grad():
+            variance_features = features.flatten(0, -2)
             variances = torch.bmm(
-                features[:, None, :],
-                (features @ self.covariance)[:, :, None],
-            ).reshape(-1)
+                variance_features[:, None, :],
+                (variance_features @ self.covariance)[:, :, None],
+            ).squeeze()
+
+            variances = variances.unflatten(0, features.shape[:-1])
 
         if not with_variance:
-            return logits / (1 + (0.32*variances.unsqueeze(-1)))**(0.5)
+            return (logits / (1 + (0.32*variances.unsqueeze(-1)))**(0.5)).permute(0, 3, 2, 1)
         else:
-            return logits / (1 + (0.32*variances.unsqueeze(-1)))**(0.5), variances
+            return (logits / (1 + (0.32*variances.unsqueeze(-1)))**(0.5)).permute(0, 3, 2, 1), variances
 
     def reset_precision(self):
         self.precision[...] = self.precision_initial.detach()
@@ -352,7 +358,7 @@ class RandomFeatureGaussianProcess(nn.Module):
     def update_precision(self, X: torch.Tensor):
         with torch.no_grad():
             features = self.rff(X)
-            
+
             features_list = [torch.zeros_like(features) for i in range(int(os.environ['WORLD_SIZE']))]
             torch.distributed.all_gather(features_list, features)
             features = torch.cat(features_list)
@@ -372,7 +378,7 @@ class RandomFeatureGaussianProcess(nn.Module):
 
 class SNGPUnet(nn.Module):
     def __init__(self, n_channels, n_classes, bilinear=False):
-
+        super().__init__()
         module = UNet(n_channels, 64, bilinear)
         
         for name, mod in convleaves(module):
@@ -392,6 +398,9 @@ class SNGPUnet(nn.Module):
                                             )
         
     def forward(self, x, with_variance: bool = False, update_precision: bool = True):
+
+        
+
         return self.rfgp(x, with_variance, update_precision)
 
 
