@@ -26,33 +26,33 @@ from yaml import Loader
 import functools
 
 from .utils import LabelToTensor, test_ddp, train_ddp, get_rank
-from .ijepa import init_model, load_checkpoint
 from .unet import SNGPUnet
 from .sngp import SNGP_probe, SNGP_FPFT
 
-def load_pretrained_model(yaml_path, checkpoint_path, device):
-    with open(yaml_path, 'rb') as fp:
-        yam = yaml.load(fp, Loader)
+# def load_pretrained_model(yaml_path, checkpoint_path, device):
+#     from .ijepa import init_model, load_checkpoint
+#     with open(yaml_path, 'rb') as fp:
+#         yam = yaml.load(fp, Loader)
 
-    encoder, predictor = init_model(
-            device=device,
-            patch_size=yam['mask']['patch_size'],
-            crop_size=yam['data']['crop_size'],
-            pred_depth=yam['meta']['pred_depth'],
-            pred_emb_dim=yam['meta']['pred_emb_dim'],
-            model_name=yam['meta']['model_name'])
+#     encoder, predictor = init_model(
+#             device=device,
+#             patch_size=yam['mask']['patch_size'],
+#             crop_size=yam['data']['crop_size'],
+#             pred_depth=yam['meta']['pred_depth'],
+#             pred_emb_dim=yam['meta']['pred_emb_dim'],
+#             model_name=yam['meta']['model_name'])
 
-    target_encoder = copy.deepcopy(encoder)
+#     target_encoder = copy.deepcopy(encoder)
 
-    encoder, predictor, target_encoder, epoch = load_checkpoint(
-        device,
-        checkpoint_path,
-        encoder,
-        predictor,
-        target_encoder,
-    )
+#     encoder, predictor, target_encoder, epoch = load_checkpoint(
+#         device,
+#         checkpoint_path,
+#         encoder,
+#         predictor,
+#         target_encoder,
+#     )
     
-    return target_encoder
+#     return target_encoder
 
 
 

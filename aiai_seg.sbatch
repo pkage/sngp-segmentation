@@ -31,6 +31,13 @@ else
 fi
 
 # kickoff
-echo "beginning projection..."
-poetry run python main_seg.py
+echo "beginning train..."
+poetry run python main_ddp.py
 
+# srun torchrun \
+#     --nnodes $SLURM_JOB_NUM_NODES \
+#     --nproc_per_node 2 \
+#     --rdzv_id $RANDOM \
+#     --rdzv_backend c10d \
+#     --rdzv_endpoint "$head_node_ip:64425" \
+#     main_ddp.py
