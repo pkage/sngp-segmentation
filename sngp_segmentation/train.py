@@ -59,6 +59,7 @@ from .sngp import SNGP_probe, SNGP_FPFT
 def training_process(args):
     num_classes = 20 + 1
     device = int(os.environ['RANK']) % torch.cuda.device_count()
+    print(f'rank {os.environ["RANK"]} running on device {device} (of {torch.cuda.device_count()})')
     torch.cuda.set_device(device)
 
     trans = transforms.Compose([

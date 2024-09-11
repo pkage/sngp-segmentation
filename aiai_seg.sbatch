@@ -4,7 +4,7 @@
 #SBATCH --partition=AIAI_GPU
 #SBATCH --ntasks=1
 #SBATCH --mem=64G
-#SBATCH --gres=gpu:A40:4
+#SBATCH --gres=gpu:A40:1
 #SBATCH --output=/home/s1734411/sngp-segmentation/stdout.txt
 #SBATCH --error=/home/s1734411/sngp-segmentation/stderr.txt
 #SBATCH --time=12:00:00
@@ -30,14 +30,19 @@ else
     echo "voc has been downloaded already"
 fi
 
+# perf tuning
+export OMP_NUM_THREADS=16
+
 # kickoff
 echo "beginning train..."
-poetry run python main_ddp.py
+# poetry run python main_ddp.py
 
-# srun torchrun \
-#     --nnodes $SLURM_JOB_NUM_NODES \
-#     --nproc_per_node 2 \
-#     --rdzv_id $RANDOM \
-#     --rdzv_backend c10d \
-#     --rdzv_endpoint "$head_node_ip:64425" \
-#     main_ddp.py
+poetry run torchrun \
+    --nnodes 1 \
+    --nproc_per_node 1 \
+    --rdzv_id $RANDOM \
+    --rdzv_backend c10d \
+    --rdzv_endpoint "localhost:64425" \
+    main_ddp.py \
+    --batch_size 24 \
+    --test_batch_size 24
