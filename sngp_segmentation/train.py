@@ -295,7 +295,7 @@ def self_training_process(args):
                 loader_val,
                 loss_fn
             )
-        ds.pseudo_label(model)
+        ds.pseudo_label(model, args.pl_fraction, args.with_replacement)
         ds_train = ds.get_labeled()
     
     return model.state_dict()
