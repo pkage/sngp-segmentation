@@ -110,7 +110,7 @@ def test_ddp(rank, device, model, loader, loss_fn):
             output = model(X)
             if jaccard is None:
                 jaccard = JaccardIndex(task="multiclass", num_classes=output.shape[1], ignore_index=255).to(device)
-            loss = loss_fn(output, y.squeeze().type(torch.int64))
+            loss = loss_fn(output, y.type(torch.int64))
             ddp_loss[0] += loss.item()
             ddp_loss[1] += torch.where(y != loss_fn.ignore_index, (output.argmax(1) == y), 0).type(torch.float).sum().item()
             ddp_loss[2] += torch.where(y != loss_fn.ignore_index, 1.0, 0.0).sum().item()
@@ -152,19 +152,20 @@ def test_ddp(rank, device, model, loader, loss_fn):
 
 
 
-def train(device, epoch, model, loader, loss_fn, optimizer):
+def train(device, epoch, model, loader, loss_fn, optimizer, accumulate=1):
     jaccard = None
     ddp_loss = torch.zeros(5).to(device)
     model.train()
-    for X, y in loader:
+    for (X, y), i in enumerate(loader):
         X, y = X.to(device), y.to(device)
-        optimizer.zero_grad()
         output = model(X, update_precision=False)
         if jaccard is None:
             jaccard = JaccardIndex(task="multiclass", num_classes=output.shape[1], ignore_index=255).to(device)
-        loss = loss_fn(output, y.squeeze().type(torch.int64))
+        loss = loss_fn(output, y.type(torch.int64))
         loss.backward()
-        optimizer.step()
+        if i % accumulate == accumulate - 1:
+            optimizer.step()
+            optimizer.zero_grad()
         ddp_loss[0] += loss.item()
         ddp_loss[1] += torch.where(y == loss_fn.ignore_index, 0.0, (output.argmax(1) == y)).sum().item()
         ddp_loss[2] += torch.where(y == loss_fn.ignore_index, 0.0, 1.0).sum().item()

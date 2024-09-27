@@ -399,8 +399,6 @@ class SNGPUnet(nn.Module):
         
     def forward(self, x, with_variance: bool = False, update_precision: bool = True):
 
-        
-
         return self.rfgp(x, with_variance, update_precision)
 
 

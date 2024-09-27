@@ -26,6 +26,7 @@ from yaml import Loader
 import functools
 
 from .utils import LabelToTensor, test_ddp, train_ddp, get_rank
+from .data import SplitVOCDataset
 from .unet import SNGPUnet
 from .sngp import SNGP_probe, SNGP_FPFT
 
@@ -121,7 +122,8 @@ def training_process(args):
             model,
             loader_train,
             loss_fn,
-            optimizer
+            optimizer,
+            accumulate=2
         )
 
         test_ddp(
@@ -164,27 +166,7 @@ def fpft_training_process(args, state_dict=None):
     ds_val = torchvision.datasets.VOCSegmentation(os.environ['LSCRATCH'], image_set='val', transform=trans, target_transform=target_trans, download=True)
     loader_val = DataLoader(ds_val, batch_size=args.test_batch_size, pin_memory=True, shuffle=False, num_workers=12)
 
-    target_encoder = load_pretrained_model(
-        args.vit_cfg,
-        args.vit_ckpt,
-        0
-    )
-    target_encoder.requires_grad = False
-    # target_encoder = load_pretrained_model('./in1k_vith14_ep300.yaml', '../models/IN1K-vit.h.14-300e.pth.tar', 0)
-
-    probe = SNGP_probe(
-        target_encoder,
-        1280,
-        num_classes,
-        14
-    ).to(device)
-
-    if state_dict is not None:
-        probe.load_state_dict(state_dict)
-    else:
-        print('not loading a state dict, this will probably be catastrophic...')
-
-    model = SNGP_FPFT(probe).to(device)
+    model = SNGPUnet(3, num_classes).to(device)
 
     # model = torch.hub.load('mateuszbuda/brain-segmentation-pytorch', 'unet', in_channels=3, out_channels=num_classes, init_features=32, pretrained=False).to(device)
     auto_wrap_policy = functools.partial(
@@ -234,3 +216,86 @@ def fpft_training_process(args, state_dict=None):
                 os.path.join(checkpoint_path, f'ijepa_sngp_epoch{epoch}.pth')
             )
 """
+
+def self_training_process(args):
+    num_classes = 20 + 1
+    device = int(os.environ['RANK']) % torch.cuda.device_count()
+    print(f'rank {os.environ["RANK"]} running on device {device} (of {torch.cuda.device_count()})')
+    torch.cuda.set_device(device)
+
+    trans = transforms.Compose([
+        transforms.Resize(256),
+        transforms.CenterCrop(224),
+        transforms.ToTensor(),
+        transforms.Normalize(
+            mean=[0.485, 0.456, 0.406], 
+            std=[0.229, 0.224, 0.225]
+        )
+    ])
+
+    target_trans = transforms.Compose([
+        transforms.Resize(256, interpolation=InterpolationMode.NEAREST),
+        transforms.CenterCrop(224),
+        LabelToTensor(255)
+    ])
+
+    checkpoint_path = os.path.join(os.environ['LSCRATCH'], 'checkpoints')
+
+    if device == 0:
+        # load the voc file into our scratch space
+        shutil.copy(args.voc, os.environ['LSCRATCH'])
+
+        if not os.path.exists(checkpoint_path):
+            os.mkdir(checkpoint_path)
+    else:
+        while not os.path.exists(checkpoint_path):
+            time.sleep(10)
+
+    ds = SplitVOCDataset(torchvision.datasets.VOCSegmentation(os.environ['LSCRATCH'], image_set='train', transform=trans, target_transform=target_trans, download=True))
+    ds_train = ds.get_labeled()
+    loader_train = DataLoader(ds_train, batch_size=args.batch_size, pin_memory=True, shuffle=True, num_workers=12)
+
+    ds_val = torchvision.datasets.VOCSegmentation(os.environ['LSCRATCH'], image_set='val', transform=trans, target_transform=target_trans, download=True)
+    loader_val = DataLoader(ds_val, batch_size=args.test_batch_size, pin_memory=True, shuffle=False, num_workers=12)
+
+    model = SNGPUnet(
+        3,
+        num_classes,
+    ).to(device)
+
+    model = DDP(
+        model,
+        device_ids=[device],
+        find_unused_parameters=True
+    )
+
+    loss_fn = torch.nn.CrossEntropyLoss(ignore_index=255)
+    optimizer = optim.Adam(
+        model.parameters(),
+        lr=args.learning_rate
+    )
+
+    for iteration in range(args.iterations):
+        for epoch in range(args.epochs):
+            train_ddp(
+                get_rank(),
+                device,
+                epoch,
+                model,
+                loader_train,
+                loss_fn,
+                optimizer,
+                accumulate=2
+            )
+
+            test_ddp(
+                get_rank(),
+                device,
+                model,
+                loader_val,
+                loss_fn
+            )
+        ds.pseudo_label(model)
+        ds_train = ds.get_labeled()
+    
+    return model.state_dict()
