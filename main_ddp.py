@@ -2,7 +2,7 @@ import argparse
 
 from dotenv import load_dotenv
 
-from sngp_segmentation.train import training_process
+from sngp_segmentation.train import self_training_process
 from sngp_segmentation.utils import cleanup, get_rank, setup, wandb_setup
 
 load_dotenv()
@@ -21,6 +21,12 @@ def parse_args():
                         help='learning rate for Adam (default: %(default)s)')
     parser.add_argument('-p', '--patience', type=float, default=64,
                         help='number of epochs to train for without improvement (default: %(default)s)')
+    parser.add_argument('-i', '--iterations', type=float, default=10,
+                        help='number of iteratons of self-training (default: %(default)s)')
+    parser.add_argument('-pf', '--pl_fraction', type=float, default=0.05,
+                        help='fraction of unlabeled examples to label in each iteration (default: %(default)s)')
+    parser.add_argument('-rep', '--with_replacement', type=bool, default=True,
+                        help='whether or not to reset the labeled and unlabeled sets after each iteration (default: %(default)s)')
     parser.add_argument('--voc', help='VOC file', default='./VOCtrainval_11-May-2012.tar')
 
     # parser.add_argument('--vit-ckpt', help='ViT checkpoint', default='../models/IN1K-vit.h.14-300e.pth.tar') # defaults to not breaking jay's code
@@ -35,7 +41,7 @@ def main():
         wandb_setup(args)
 
     setup()
-    training_process(args)
+    self_training_process(args)
     cleanup()
 
 
