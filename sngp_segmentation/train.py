@@ -25,7 +25,7 @@ import yaml
 from yaml import Loader
 import functools
 
-from .utils import LabelToTensor, test_ddp, train_ddp, get_rank
+from .utils import LabelToTensor, test_ddp, train_ddp, mpl_ddp, get_rank
 from .data import SplitVOCDataset
 from .unet import SNGPUnet
 from .sngp import SNGP_probe, SNGP_FPFT
@@ -299,3 +299,126 @@ def self_training_process(args):
         ds_train = ds.get_labeled()
     
     return model.state_dict()
+
+
+def mpl_training_process(args):
+    num_classes = 20 + 1
+    device = int(os.environ['RANK']) % torch.cuda.device_count()
+    print(f'rank {os.environ["RANK"]} running on device {device} (of {torch.cuda.device_count()})')
+    torch.cuda.set_device(device)
+
+    trans = transforms.Compose([
+        transforms.Resize(256),
+        transforms.CenterCrop(224),
+        transforms.ToTensor(),
+        transforms.Normalize(
+            mean=[0.485, 0.456, 0.406], 
+            std=[0.229, 0.224, 0.225]
+        )
+    ])
+
+    target_trans = transforms.Compose([
+        transforms.Resize(256, interpolation=InterpolationMode.NEAREST),
+        transforms.CenterCrop(224),
+        LabelToTensor(255)
+    ])
+
+    checkpoint_path = os.path.join(os.environ['LSCRATCH'], 'checkpoints')
+
+    if device == 0:
+        # load the voc file into our scratch space
+        shutil.copy(args.voc, os.environ['LSCRATCH'])
+
+        if not os.path.exists(checkpoint_path):
+            os.mkdir(checkpoint_path)
+    else:
+        while not os.path.exists(checkpoint_path):
+            time.sleep(10)
+
+    ds = SplitVOCDataset(torchvision.datasets.VOCSegmentation(os.environ['LSCRATCH'], image_set='train', transform=trans, target_transform=target_trans, download=True))
+    ds_train = ds.get_labeled()
+    ds_unlabeled = ds.get_unlabeled()
+    loader_train = DataLoader(ds_train, batch_size=args.batch_size, pin_memory=True, shuffle=True, num_workers=12)
+    loader_unlabeled = DataLoader(ds_train, batch_size=args.batch_size, pin_memory=True, shuffle=True, num_workers=12)
+
+    ds_val = torchvision.datasets.VOCSegmentation(os.environ['LSCRATCH'], image_set='val', transform=trans, target_transform=target_trans, download=True)
+    loader_val = DataLoader(ds_val, batch_size=args.test_batch_size, pin_memory=True, shuffle=False, num_workers=12)
+
+    student = SNGPUnet(
+        3,
+        num_classes,
+    ).to(device)
+
+    teacher = SNGPUnet(
+        3,
+        num_classes,
+    ).to(device)
+
+    student = DDP(
+        student,
+        device_ids=[device],
+        find_unused_parameters=True
+    )
+
+    teacher = DDP(
+        teacher,
+        device_ids=[device],
+        find_unused_parameters=True
+    )
+
+    loss_fn = torch.nn.CrossEntropyLoss(ignore_index=255)
+
+    student_optimizer = optim.Adam(
+        student.parameters(),
+        lr=args.learning_rate
+    )
+
+    teacher_optimizer = optim.Adam(
+        teacher.parameters(),
+        lr=args.learning_rate
+    )
+
+    for epoch in range(args.warmup):
+        train_ddp(
+            get_rank(),
+            device,
+            epoch,
+            teacher,
+            loader_train,
+            loss_fn,
+            teacher_optimizer,
+            accumulate=1
+        )
+
+        test_ddp(
+            get_rank(),
+            device,
+            teacher,
+            loader_val,
+            loss_fn
+        )
+
+    for epoch in range(args.epochs):
+        mpl_ddp(
+            get_rank(),
+            device,
+            epoch,
+            teacher,
+            student,
+            loader_train,
+            loader_unlabeled,
+            loss_fn,
+            teacher_optimizer,
+            student_optimizer,
+            accumulate=1
+        )
+
+        test_ddp(
+            get_rank(),
+            device,
+            teacher,
+            loader_val,
+            loss_fn
+        )
+    
+    return student.state_dict()
