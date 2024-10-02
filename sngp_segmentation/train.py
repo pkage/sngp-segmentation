@@ -20,13 +20,15 @@ from torch.utils.data import DataLoader
 import torchvision
 from torchvision import transforms
 from torchvision.transforms.functional import InterpolationMode
+from torchvision.datasets import Cityscapes
+from torchvision.transforms import Compose, PILToTensor
 import wandb
 import yaml
 from yaml import Loader
 import functools
 
 from .utils import LabelToTensor, test_ddp, train_ddp, mpl_ddp, get_rank
-from .data import SplitVOCDataset
+from .data import SplitVOCDataset, RescaleImage
 from .unet import SNGPUnet
 from .sngp import SNGP_probe, SNGP_FPFT
 
@@ -56,28 +58,67 @@ from .sngp import SNGP_probe, SNGP_FPFT
 #     return target_encoder
 
 
+def get_datasets(args):
+    if args.dataset == 'cityscapes':
+        ds_train = Cityscapes(
+            args.cityscapes,
+            split='train',
+            mode='fine',
+            target_type='semantic',
+            transform=Compose([
+                RescaleImage( (256,256) ),
+                PILToTensor()
+            ]),
+            target_transform=Compose([
+                RescaleImage( (256,256) ),
+                PILToTensor()
+            ])
+        )
+        ds_val  = Cityscapes(
+            args.cityscapes,
+            split='test',
+            mode='fine',
+            target_type='semantic',
+            transform=Compose([
+                RescaleImage( (256,256) ),
+                PILToTensor()
+            ]),
+            target_transform=Compose([
+                RescaleImage( (256,256) ),
+                PILToTensor()
+            ])
+        )
+        return ds_train, ds_val
+    elif args.dataset == 'pascal-voc':
+        shutil.copy(args.voc, os.environ['LSCRATCH'])
+        trans = transforms.Compose([
+            transforms.Resize(256),
+            transforms.CenterCrop(224),
+            transforms.ToTensor(),
+            transforms.Normalize(
+                mean=[0.485, 0.456, 0.406], 
+                std=[0.229, 0.224, 0.225]
+            )
+        ])
+
+        target_trans = transforms.Compose([
+            transforms.Resize(256, interpolation=InterpolationMode.NEAREST),
+            transforms.CenterCrop(224),
+            LabelToTensor(255)
+        ])
+
+        ds_train = torchvision.datasets.VOCSegmentation(os.environ['LSCRATCH'], image_set='train', transform=trans, target_transform=target_trans, download=True)
+        ds_val = torchvision.datasets.VOCSegmentation(os.environ['LSCRATCH'], image_set='val', transform=trans, target_transform=target_trans, download=True)
+        return ds_train, ds_val
+    else:
+        raise ValueError(f'unknown dataset: {args.dataset}')
+
 
 def training_process(args):
     num_classes = 20 + 1
     device = int(os.environ['RANK']) % torch.cuda.device_count()
     print(f'rank {os.environ["RANK"]} running on device {device} (of {torch.cuda.device_count()})')
     torch.cuda.set_device(device)
-
-    trans = transforms.Compose([
-        transforms.Resize(256),
-        transforms.CenterCrop(224),
-        transforms.ToTensor(),
-        transforms.Normalize(
-            mean=[0.485, 0.456, 0.406], 
-            std=[0.229, 0.224, 0.225]
-        )
-    ])
-
-    target_trans = transforms.Compose([
-        transforms.Resize(256, interpolation=InterpolationMode.NEAREST),
-        transforms.CenterCrop(224),
-        LabelToTensor(255)
-    ])
 
     checkpoint_path = os.path.join(os.environ['LSCRATCH'], 'checkpoints')
 
@@ -91,10 +132,9 @@ def training_process(args):
         while not os.path.exists(checkpoint_path):
             time.sleep(10)
 
-    ds_train = torchvision.datasets.VOCSegmentation(os.environ['LSCRATCH'], image_set='train', transform=trans, target_transform=target_trans, download=True)
-    loader_train = DataLoader(ds_train, batch_size=args.batch_size, pin_memory=True, shuffle=True, num_workers=12)
+    ds_train, ds_val = get_datasets(args)
 
-    ds_val = torchvision.datasets.VOCSegmentation(os.environ['LSCRATCH'], image_set='val', transform=trans, target_transform=target_trans, download=True)
+    loader_train = DataLoader(ds_train, batch_size=args.batch_size, pin_memory=True, shuffle=True, num_workers=12)
     loader_val = DataLoader(ds_val, batch_size=args.test_batch_size, pin_memory=True, shuffle=False, num_workers=12)
 
     model = SNGPUnet(
@@ -158,12 +198,10 @@ def fpft_training_process(args, state_dict=None):
     ])
 
     # load the voc file into our scratch space
-    shutil.copy(args.voc, os.environ['LSCRATCH'])
 
-    ds_train = torchvision.datasets.VOCSegmentation(os.environ['LSCRATCH'], image_set='train', transform=trans, target_transform=target_trans, download=True)
+    ds_train, ds_val = get_datasets(args)
+
     loader_train = DataLoader(ds_train, batch_size=args.batch_size, pin_memory=True, shuffle=True, num_workers=12)
-
-    ds_val = torchvision.datasets.VOCSegmentation(os.environ['LSCRATCH'], image_set='val', transform=trans, target_transform=target_trans, download=True)
     loader_val = DataLoader(ds_val, batch_size=args.test_batch_size, pin_memory=True, shuffle=False, num_workers=12)
 
     model = SNGPUnet(3, num_classes).to(device)

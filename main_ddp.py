@@ -28,6 +28,8 @@ def parse_args():
     parser.add_argument('-rep', '--with_replacement', type=bool, default=True,
                         help='whether or not to reset the labeled and unlabeled sets after each iteration (default: %(default)s)')
     parser.add_argument('--voc', help='VOC file', default='./VOCtrainval_11-May-2012.tar')
+    parser.add_argument('--cityscapes', help='cityscapes directory', default='./cityscapes')
+    parser.add_argument('--dataset', help='dataset to use', default='pascal-voc')
 
     # parser.add_argument('--vit-ckpt', help='ViT checkpoint', default='../models/IN1K-vit.h.14-300e.pth.tar') # defaults to not breaking jay's code
     # parser.add_argument('--vit-cfg', help='ViT configuration', default='./in1k_vith14_ep300.yaml')
