@@ -1,20 +1,20 @@
 # code adapted from https://github.com/milesial/Pytorch-UNet
 
+from collections import OrderedDict
+from copy import deepcopy as copy
+import math
+import os
+from pathlib import Path
+
 import torch
-import torchvision
-import torch.utils.checkpoint
 import torch.nn as nn
 import torch.nn.functional as F
-
-from torch.nn.utils import spectral_norm
-import math
 from torch.nn.parameter import Parameter
-from collections import OrderedDict
-import os
+from torch.nn.utils import spectral_norm
+import torch.utils.checkpoint
+import torchvision
 
-from copy import deepcopy as copy
-
-from sngp_segmentation.utils import convleaves, getattrrecur, setattrrecur
+from .utils import convleaves, getattrrecur, setattrrecur
 
 
 class DoubleConv(nn.Module):
@@ -400,5 +400,6 @@ class SNGPUnet(nn.Module):
     def forward(self, x, with_variance: bool = False, update_precision: bool = True):
 
         return self.rfgp(x, with_variance, update_precision)
+
 
 

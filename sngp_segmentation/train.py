@@ -31,6 +31,7 @@ from .utils import LabelToTensor, test_ddp, train_ddp, mpl_ddp, get_rank
 from .data import SplitVOCDataset, RescaleImage
 from .unet import SNGPUnet
 from .sngp import SNGP_probe, SNGP_FPFT
+from .deeplab import SNGPDeepLabV3_Resnet50
 
 # def load_pretrained_model(yaml_path, checkpoint_path, device):
 #     from .ijepa import init_model, load_checkpoint
@@ -137,10 +138,19 @@ def training_process(args):
     loader_train = DataLoader(ds_train, batch_size=args.batch_size, pin_memory=True, shuffle=True, num_workers=12)
     loader_val = DataLoader(ds_val, batch_size=args.test_batch_size, pin_memory=True, shuffle=False, num_workers=12)
 
-    model = SNGPUnet(
-        3,
-        num_classes,
-    ).to(device)
+    if args.model == 'unet':
+        model = SNGPUnet(
+            3,
+            num_classes,
+        ).to(device)
+    elif args.model == 'deeplab':
+        model = SNGPDeepLabV3_Resnet50(
+            3,
+            num_classes,
+            weights=args.model_weights
+        ).to(device)
+    else:
+        raise ValueError(f'no such model {args.model}')
 
     model = DDP(
         model,
@@ -204,7 +214,19 @@ def fpft_training_process(args, state_dict=None):
     loader_train = DataLoader(ds_train, batch_size=args.batch_size, pin_memory=True, shuffle=True, num_workers=12)
     loader_val = DataLoader(ds_val, batch_size=args.test_batch_size, pin_memory=True, shuffle=False, num_workers=12)
 
-    model = SNGPUnet(3, num_classes).to(device)
+    if args.model == 'unet':
+        model = SNGPUnet(
+            3,
+            num_classes,
+        ).to(device)
+    elif args.model == 'deeplab':
+        model = SNGPDeepLabV3_Resnet50(
+            3,
+            num_classes,
+            weights=args.model_weights
+        ).to(device)
+    else:
+        raise ValueError(f'no such model {args.model}')
 
     # model = torch.hub.load('mateuszbuda/brain-segmentation-pytorch', 'unet', in_channels=3, out_channels=num_classes, init_features=32, pretrained=False).to(device)
     auto_wrap_policy = functools.partial(
@@ -296,10 +318,19 @@ def self_training_process(args):
     ds_val = torchvision.datasets.VOCSegmentation(os.environ['LSCRATCH'], image_set='val', transform=trans, target_transform=target_trans, download=True)
     loader_val = DataLoader(ds_val, batch_size=args.test_batch_size, pin_memory=True, shuffle=False, num_workers=12)
 
-    model = SNGPUnet(
-        3,
-        num_classes,
-    ).to(device)
+    if args.model == 'unet':
+        model = SNGPUnet(
+            3,
+            num_classes,
+        ).to(device)
+    elif args.model == 'deeplab':
+        model = SNGPDeepLabV3_Resnet50(
+            3,
+            num_classes,
+            weights=args.model_weights
+        ).to(device)
+    else:
+        raise ValueError(f'no such model {args.model}')
 
     model = DDP(
         model,
@@ -382,15 +413,29 @@ def mpl_training_process(args):
     ds_val = torchvision.datasets.VOCSegmentation(os.environ['LSCRATCH'], image_set='val', transform=trans, target_transform=target_trans, download=True)
     loader_val = DataLoader(ds_val, batch_size=args.test_batch_size, pin_memory=True, shuffle=False, num_workers=12)
 
-    student = SNGPUnet(
-        3,
-        num_classes,
-    ).to(device)
+    if args.model == 'unet':
+        student = SNGPUnet(
+            3,
+            num_classes,
+        ).to(device)
 
-    teacher = SNGPUnet(
-        3,
-        num_classes,
-    ).to(device)
+        teacher = SNGPUnet(
+            3,
+            num_classes,
+        ).to(device)
+    elif args.model == 'deeplab':
+        student = SNGPDeepLabV3_Resnet50(
+            3,
+            num_classes,
+            weights=args.model_weights
+        ).to(device)
+        teacher = SNGPDeepLabV3_Resnet50(
+            3,
+            num_classes,
+            weights=args.model_weights
+        ).to(device)
+    else:
+        raise ValueError(f'no such model {args.model}')
 
     student = DDP(
         student,
