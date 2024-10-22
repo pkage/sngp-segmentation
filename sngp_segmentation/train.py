@@ -28,7 +28,7 @@ from yaml import Loader
 import functools
 
 from .utils import LabelToTensor, test_ddp, train_ddp, mpl_ddp, get_rank
-from .data import SplitVOCDataset, RescaleImage
+from .data import SplitVOCDataset
 from .unet import SNGPUnet
 from .sngp import SNGP_probe, SNGP_FPFT
 from .deeplab import SNGPDeepLabV3_Resnet50
@@ -67,11 +67,11 @@ def get_datasets(args):
             mode='fine',
             target_type='semantic',
             transform=Compose([
-                RescaleImage( (256,256) ),
+                transforms.Resize(256, interpolation=InterpolationMode.NEAREST),
                 PILToTensor()
             ]),
             target_transform=Compose([
-                RescaleImage( (256,256) ),
+                transforms.Resize(256, interpolation=InterpolationMode.NEAREST),
                 PILToTensor()
             ])
         )
@@ -81,11 +81,11 @@ def get_datasets(args):
             mode='fine',
             target_type='semantic',
             transform=Compose([
-                RescaleImage( (256,256) ),
+                transforms.Resize(256, interpolation=InterpolationMode.NEAREST),
                 PILToTensor()
             ]),
             target_transform=Compose([
-                RescaleImage( (256,256) ),
+                transforms.Resize(256, interpolation=InterpolationMode.NEAREST),
                 PILToTensor()
             ])
         )

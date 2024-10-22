@@ -456,7 +456,7 @@ def MPL_Seg(
         teacher_loss = teacher_loss_mpl
     # update teacher based on student performance
     teacher_optimizer.zero_grad()
-    torch.nn.utils.clip_grad_norm_(teacher.module.parameters(), 1.0)
+    torch.nn.utils.clip_grad_norm_(teacher.parameters(), 1.0)
     teacher_loss.backward()
     teacher_optimizer.step()
     # return the student output for the batch

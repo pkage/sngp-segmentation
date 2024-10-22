@@ -5,7 +5,6 @@ from torch.utils.data import DataLoader
 import numpy as np
 import os
 from PIL import Image
-from PIL import Resampling
 
 
 class SplitVOCDataset:
@@ -167,16 +166,4 @@ class SplitVOCDataset:
     def __len__(self):
         return len(self.dataset)
     
-
-class RescaleImage:
-    target_size: Tuple[int, int]
-
-    def __init__(self, target_size: Tuple[int, int]):
-        self.target_size = target_size
-
-    def __call__(self, image: Image):
-        return image.resize(
-            self.target_size,
-            resample=Resampling.NEAREST
-        )
 
