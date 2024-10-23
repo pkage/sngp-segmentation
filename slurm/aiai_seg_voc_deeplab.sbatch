@@ -53,5 +53,5 @@ cd $PROJ_DIR && poetry run torchrun \
     --rdzv_endpoint "localhost:64425" \
     main_ddp.py \
     --batch_size 24 \
-    --test_batch_size 24
+    --test_batch_size 24 \
     --model deeplab
