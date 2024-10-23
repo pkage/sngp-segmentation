@@ -5,8 +5,8 @@
 #SBATCH --ntasks=1
 #SBATCH --mem=64G
 #SBATCH --gres=gpu:A40:1
-#SBATCH --output=/home/s1734411/sngp-segmentation/slurm/stdout.txt
-#SBATCH --error=/home/s1734411/sngp-segmentation/slurm/stderr.txt
+#SBATCH --output=/home/s1734411/sngp-segmentation/slurm/stdout_cty_dpl.txt
+#SBATCH --error=/home/s1734411/sngp-segmentation/slurm/stderr_cty_dpl.txt
 #SBATCH --time=12:00:00
 #SBATCH --job-name=sngp_cty_dpl
 #SBATCH --mail-user=p.kage@ed.ac.uk
