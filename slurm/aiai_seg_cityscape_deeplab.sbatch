@@ -45,9 +45,18 @@ else
     echo "leftImg8bit_trainvaltest.zip has already been downloaded."
 fi
 
-# TODO: check whether these have been unzipped already before unzipping
-cd $LSCRATCH/datasets/ && unzip leftImg8bit_trainvaltest.zip
-cd $LSCRATCH/datasets/ && unzip gtFine_trainvaltest.zip
+if ! [ -d $LSCRATCH/datasets/leftImg8bit ]; then
+    echo "leftImg8bit_trainvaltest.zip has not been unzipped, expanding now..."
+    cd $LSCRATCH/datasets/ && unzip leftImg8bit_trainvaltest.zip
+else
+    echo "leftImg8bit_trainvaltest.zip has already been unzipped."
+fi
+if ! [ -d $LSCRATCH/datasets/gtFine_trainvaltest ]; then
+    echo "gtFine_trainvaltest.zip has not been unzipped, expanding now..."
+    cd $LSCRATCH/datasets/ && unzip gtFine_trainvaltest.zip
+else
+    echo "gtFine_trainvaltest.zip has already been unzipped."
+fi
 
 
 # ... and the voc
