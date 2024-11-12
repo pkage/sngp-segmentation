@@ -1,7 +1,7 @@
 from copy import deepcopy as copy
-from typing import Tuple
+from typing import Any
 import torch
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Dataset
 import numpy as np
 import os
 from PIL import Image
@@ -166,4 +166,3 @@ class SplitVOCDataset:
     def __len__(self):
         return len(self.dataset)
     
-

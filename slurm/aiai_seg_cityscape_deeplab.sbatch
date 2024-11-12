@@ -29,43 +29,7 @@ export PATH=/home/s1734411/py3.11.4/bin:$PATH
 cd $PROJ_DIR
 
 #
-mkdir -p $LSCRATCH/datasets
-
-if ! [ -f $LSCRATCH/datasets/gtFine_trainvaltest.zip ]; then
-    echo "gtFine_trainvaltest.zip not found, downloading..."
-    curl -L $DOWNLOAD_FUNCTION_URL/gtFine_trainvaltest.zip -o $LSCRATCH/datasets/gtFine_trainvaltest.zip
-else
-    echo "gtFine_trainvaltest.zip has already been downloaded."
-fi
-
-if ! [ -f $LSCRATCH/datasets/leftImg8bit_trainvaltest.zip ]; then
-    echo "leftImg8bit_trainvaltest.zip not found, downloading..."
-    curl -L $DOWNLOAD_FUNCTION_URL/leftImg8bit_trainvaltest.zip -o $LSCRATCH/datasets/leftImg8bit_trainvaltest.zip
-else
-    echo "leftImg8bit_trainvaltest.zip has already been downloaded."
-fi
-
-if ! [ -d $LSCRATCH/datasets/leftImg8bit ]; then
-    echo "leftImg8bit_trainvaltest.zip has not been unzipped, expanding now..."
-    cd $LSCRATCH/datasets/ && unzip leftImg8bit_trainvaltest.zip
-else
-    echo "leftImg8bit_trainvaltest.zip has already been unzipped."
-fi
-if ! [ -d $LSCRATCH/datasets/gtFine_trainvaltest ]; then
-    echo "gtFine_trainvaltest.zip has not been unzipped, expanding now..."
-    cd $LSCRATCH/datasets/ && unzip gtFine_trainvaltest.zip
-else
-    echo "gtFine_trainvaltest.zip has already been unzipped."
-fi
-
-
-# ... and the voc
-# if ! [ -f ./VOCtrainval_11-May-2012.tar ]; then
-#     echo "voc not found, downloading..."
-#     curl -L -O -J http://host.robots.ox.ac.uk/pascal/VOC/voc2012/VOCtrainval_11-May-2012.tar
-# else
-#     echo "voc has been downloaded already"
-# fi
+source ./slurm/dataset_download.sh
 
 # perf tuning
 export OMP_NUM_THREADS=16
@@ -74,15 +38,17 @@ export OMP_NUM_THREADS=16
 echo "beginning train..."
 # poetry run python main_ddp.py
 
-cd $PROJ_DIR && poetry run torchrun \
-    --nnodes 1 \
-    --nproc_per_node 1 \
-    --rdzv_id $RANDOM \
-    --rdzv_backend c10d \
-    --rdzv_endpoint "localhost:64425" \
-    main_ddp.py \
-    --batch_size 24 \
-    --test_batch_size 24 \
-    --model deeplab \
-    --dataset cityscapes \
-    --cityscapes $LSCRATCH/datasets
+cd $PROJ_DIR && poetry run torchrun      \
+    --nnodes 1                           \
+    --nproc_per_node 1                   \
+    --rdzv_id $RANDOM                    \
+    --rdzv_backend c10d                  \
+    --rdzv_endpoint "localhost:64425"    \
+    main.py train                        \
+    --batch_size 24                      \
+    --model deeplab                      \
+    --dataset cityscapes                 \
+    --cityscapes_path $LSCRATCH/datasets \
+    --strategy baseline                  \
+    --scratch_path $LSCRATCH
+

@@ -29,14 +29,7 @@ cd $PROJ_DIR
 #
 mkdir -p $LSCRATCH/datasets
 
-
-... and the voc
-if ! [ -f ./VOCtrainval_11-May-2012.tar ]; then
-    echo "voc not found, downloading..."
-    curl -L -O -J http://host.robots.ox.ac.uk/pascal/VOC/voc2012/VOCtrainval_11-May-2012.tar
-else
-    echo "voc has been downloaded already"
-fi
+source ./slurm/dataset_download.sh
 
 # perf tuning
 export OMP_NUM_THREADS=16
