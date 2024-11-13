@@ -171,7 +171,7 @@ class Stacked_UNet_Ensemble(torch.nn.Module):
     def ensemble_fwd(self, data):
         return torch.vmap(self.ensemble_wrapper, randomness='same')(self.params, self.buffers, data.unsqueeze(0).expand(self.members, -1, -1))
 
-    def forward(self, x, with_variance=False):
+    def forward(self, x, with_variance=False, **kwargs):
         predictions = self.ensemble_fwd(x)
 
         # based on: https://arxiv.org/abs/2006.10108
@@ -397,7 +397,7 @@ class SNGPUnet(nn.Module):
                                             verbose = False,
                                             )
         
-    def forward(self, x, with_variance: bool = False, update_precision: bool = True):
+    def forward(self, x, with_variance: bool = False, update_precision: bool = True, **kwargs):
 
         return self.rfgp(x, with_variance, update_precision)
 

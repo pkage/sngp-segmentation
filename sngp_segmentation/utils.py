@@ -25,6 +25,38 @@ def get_rank():
         return 0
     return int(os.environ["RANK"])
 
+def linearleaves(module):
+    # returns a list of pairs of (parent, submodule_name) pairs for all submodule leaves of the current module
+    if isinstance(module, torch.nn.Linear):
+        return [(module, None)]
+
+    linear_children = []
+    for name, mod in module.named_modules():
+        if isinstance(mod, torch.nn.Linear) or isinstance(mod, torch.nn.Conv2d):
+            linear_children.append((name, module))
+    return linear_children
+        
+
+def getattrrecur(mod, s):
+    s = s.split('.')
+    for substr in s:
+        mod = getattr(mod, substr)
+    return mod
+
+
+def setattrrecur(mod, s, value):
+    s = s.split('.')
+    for substr in s[:-1]:
+        mod = getattr(mod, substr)
+    setattr(mod, s[-1], value)
+
+
+def spectral_normalize(model):
+    for name, mod in linearleaves(model):
+        setattrrecur(model, name, torch.nn.utils.parametrizations.spectral_norm(getattrrecur(mod, name)))
+    
+    return model
+
 
 def wandb_setup(args):
     if get_rank() != 0:
@@ -36,14 +68,14 @@ def wandb_setup(args):
     wandb.init(project=os.environ["WANDB_PROJECT"], config=vars(args))
 
 
-def train_ddp(rank, device, epoch, model, loader, loss_fn, optimizer, accumulate=2):
+def train_ddp(rank, device, epoch, model, loader, loss_fn, optimizer, accumulate=2, warmup=5):
     jaccard = None
     step = 0
     ddp_loss = torch.zeros(5).to(device)
     model.train()
     for X, y in tqdm(loader):
         X, y = X.to(device), y.to(device)
-        output = model(X)  # ), update_precision=False)
+        output = model(X, freeze_backbone=epoch < warmup)  # ), update_precision=False)
 
         if jaccard is None:
             jaccard = JaccardIndex(
@@ -194,7 +226,7 @@ def test_ddp(rank, device, model, loader, loss_fn):
     with torch.no_grad():
         for X, y in loader:
             X, y = X.to(device), y.to(device)
-            output = model(X)
+            output = model(X, with_variance=False, update_precision=False)
             if jaccard is None:
                 jaccard = JaccardIndex(
                     task="multiclass", num_classes=output.shape[1], ignore_index=255

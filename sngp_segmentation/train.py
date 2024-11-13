@@ -31,7 +31,7 @@ from .utils import LabelToTensor, test_ddp, train_ddp, mpl_ddp, get_rank
 from .data import SplitVOCDataset
 from .unet import SNGPUnet
 from .sngp import SNGP_probe, SNGP_FPFT
-from .deeplab import SNGPDeepLabV3_Resnet50
+from .deeplab import SNGPDeepLabV3_Resnet50, Stacked_DeepLabV3_Resnet50_Ensemble, DeepLabV3_Resnet50
 
 # def load_pretrained_model(yaml_path, checkpoint_path, device):
 #     from .ijepa import init_model, load_checkpoint
@@ -164,6 +164,9 @@ def training_process(args):
         lr=args.learning_rate
     )
 
+    best_jacc = 0.0
+    best_state = None
+
     for epoch in range(args.epochs):
         train_ddp(
             get_rank(),
@@ -176,15 +179,19 @@ def training_process(args):
             accumulate=2
         )
 
-        test_ddp(
+        acc, jacc, loss = test_ddp(
             get_rank(),
             device,
             model,
             loader_val,
             loss_fn
         )
+
+        if jacc > best_jacc:
+            best_state = copy.deepcopy(model.state_dict())
+            jacc = best_jacc
     
-    return model.state_dict()
+    return best_state
 
 
 def fpft_training_process(args, state_dict=None):
@@ -311,12 +318,12 @@ def self_training_process(args):
         while not os.path.exists(checkpoint_path):
             time.sleep(10)
 
-    ds = SplitVOCDataset(torchvision.datasets.VOCSegmentation(os.environ['LSCRATCH'], image_set='train', transform=trans, target_transform=target_trans, download=True))
+    ds = SplitVOCDataset(torchvision.datasets.VOCSegmentation(os.environ['LSCRATCH'], image_set='train', transform=trans, target_transform=target_trans, download=True), fraction_labeled=1 - args.ul_fraction)
     ds_train = ds.get_labeled()
-    loader_train = DataLoader(ds_train, batch_size=args.batch_size, pin_memory=True, shuffle=True, num_workers=12)
+    loader_train = DataLoader(ds_train, batch_size=args.batch_size, pin_memory=True, shuffle=True, num_workers=12, drop_last=True)
 
     ds_val = torchvision.datasets.VOCSegmentation(os.environ['LSCRATCH'], image_set='val', transform=trans, target_transform=target_trans, download=True)
-    loader_val = DataLoader(ds_val, batch_size=args.test_batch_size, pin_memory=True, shuffle=False, num_workers=12)
+    loader_val = DataLoader(ds_val, batch_size=args.test_batch_size, pin_memory=True, shuffle=False, num_workers=12, drop_last=True)
 
     if args.model == 'unet':
         model = SNGPUnet(
@@ -324,6 +331,18 @@ def self_training_process(args):
             num_classes,
         ).to(device)
     elif args.model == 'deeplab':
+        model = DeepLabV3_Resnet50(
+            3,
+            num_classes,
+            weights=args.model_weights
+        ).to(device)
+    elif args.model == 'deep_ensemble':
+        model = Stacked_DeepLabV3_Resnet50_Ensemble(
+            3,
+            num_classes,
+            weights=args.model_weights
+        ).to(device)
+    elif args.model == 'sngp':
         model = SNGPDeepLabV3_Resnet50(
             3,
             num_classes,
@@ -332,17 +351,22 @@ def self_training_process(args):
     else:
         raise ValueError(f'no such model {args.model}')
 
-    model = DDP(
-        model,
-        device_ids=[device],
-        find_unused_parameters=True
-    )
+        """
+        model = DDP(
+            model,
+            device_ids=[device],
+            find_unused_parameters=True
+        )
+        """
 
     loss_fn = torch.nn.CrossEntropyLoss(ignore_index=255)
     optimizer = optim.Adam(
         model.parameters(),
         lr=args.learning_rate
     )
+
+    best_jacc = 0.0
+    best_state = None
 
     for iteration in range(args.iterations):
         for epoch in range(args.epochs):
@@ -354,20 +378,57 @@ def self_training_process(args):
                 loader_train,
                 loss_fn,
                 optimizer,
-                accumulate=2
+                accumulate=2,
+                warmup=args.warmup
             )
 
-            test_ddp(
+            acc, jacc, loss = test_ddp(
                 get_rank(),
                 device,
                 model,
                 loader_val,
                 loss_fn
             )
+
+            if jacc > best_jacc:
+                best_state = copy.deepcopy(model.state_dict())
+                jacc = best_jacc
+
+        model.load_state_dict(best_state)
+        ds.reset()
         ds.pseudo_label(model, args.pl_fraction, args.with_replacement)
         ds_train = ds.get_labeled()
-    
-    return model.state_dict()
+        loader_train = DataLoader(ds_train, batch_size=args.batch_size, pin_memory=True, shuffle=True, num_workers=12, drop_last=True)
+
+        print(len(ds_train))
+
+        if iteration < args.iterations - 1:
+            if args.model == 'unet':
+                model = SNGPUnet(
+                    3,
+                    num_classes,
+                ).to(device)
+            elif args.model == 'deeplab':
+                model = SNGPDeepLabV3_Resnet50(
+                    3,
+                    num_classes,
+                    weights=args.model_weights
+                ).to(device)
+            else:
+                raise ValueError(f'no such model {args.model}')
+            """
+            model = DDP(
+                model,
+                device_ids=[device],
+                find_unused_parameters=True
+            )
+            """
+            optimizer = optim.Adam(
+                model.parameters(),
+                lr=args.learning_rate
+            )
+            
+    return best_state
 
 
 def mpl_training_process(args):
