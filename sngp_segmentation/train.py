@@ -53,7 +53,7 @@ class TrainingArgs:
     patience: float
 
     strategy: Set[Literal['mpl', 'self', 'baseline']]
-    model: Literal['deeplab', 'unet']
+    model: Literal['deeplab', 'unet', 'deep_ensemble', 'sngp']
     dataset: Literal['cityscapes', 'pascal-voc', 'coco']
 
     train_iterations: int
@@ -258,10 +258,22 @@ def training_process(args: TrainingArgs):
                 num_classes,
             ).to(device)
         elif args.model == 'deeplab':
+            model = DeepLabV3_Resnet50(
+                3,
+                num_classes,
+                weights=args.model_weights
+            ).to(device)
+        elif args.model == 'deep_ensemble':
+            model = Stacked_DeepLabV3_Resnet50_Ensemble(
+                3,
+                num_classes,
+                weights=args.model_weights
+            ).to(device)
+        elif args.model == 'sngp':
             model = SNGPDeepLabV3_Resnet50(
                 3,
                 num_classes,
-                weights=args.deeplab_weights_path
+                weights=args.model_weights
             ).to(device)
         else:
             raise ValueError(f'no such model {args.model}')
