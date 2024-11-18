@@ -30,6 +30,8 @@ def parse_args():
                         help='fraction of examples from which to withold the label (default: %(default)s)')
     parser.add_argument('-rep', '--with_replacement', type=bool, default=True,
                         help='whether or not to reset the labeled and unlabeled sets after each iteration (default: %(default)s)')
+    parser.add_argument('--fsdp', type=bool, default=False,
+                        help='whether or not to reset the labeled and unlabeled sets after each iteration (default: %(default)s)')
     parser.add_argument('-warm', '--warmup', type=float, default=5,
                         help='number of epochs to freeze the backbone for (default: %(default)s)')
     parser.add_argument('-strat', '--strategy', type=str, default='self', help='Training strategy (default: %(default)s)')
