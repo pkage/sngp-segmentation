@@ -1,4 +1,5 @@
 import argparse
+from pathlib import Path
 
 from dotenv import load_dotenv
 
@@ -32,10 +33,11 @@ def parse_args():
     parser.add_argument('-warm', '--warmup', type=float, default=5,
                         help='number of epochs to freeze the backbone for (default: %(default)s)')
     parser.add_argument('-strat', '--strategy', type=str, default='self', help='Training strategy (default: %(default)s)')
-    parser.add_argument('--voc_path', help='VOC file', default='./VOCtrainval_11-May-2012.tar')
-    parser.add_argument('--cityscapes_path', help='cityscapes directory', default='./cityscapes')
-    parser.add_argument('--coco_path', help='coco directory', default='./coco_21')
-    parser.add_argument('--deeplab_weights_path', help='deeplabv3 weights directory', default='./deeplab_weights')
+    parser.add_argument('--voc_path', help='VOC file', type=Path, default='./VOCtrainval_11-May-2012.tar')
+    parser.add_argument('--cityscapes_path', help='cityscapes directory', type=Path, default='./cityscapes')
+    parser.add_argument('--coco_path', help='coco directory', type=Path, default='./coco_21')
+    parser.add_argument('--deeplab_weights_path', help='deeplabv3 weights directory', type=Path, default='./deeplab_weights')
+    parser.add_argument('--scratch_path', help='local scratch partition path', type=Path, default='./lscratch')
     parser.add_argument('--dataset', help='dataset to use', default='pascal-voc')
     parser.add_argument('--model', help='model to use (one of deeplab, unet), default %(default)', default='unet', type=str)
     parser.add_argument('--model-weights', help='model weights to load (for deeplab)', default=None, type=str)
