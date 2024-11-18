@@ -224,7 +224,8 @@ def training_process(args: TrainingArgs):
                 batch_size=args.test_batch_size,
                 pin_memory=True,
                 shuffle=False, # does not need a sampler either
-                num_workers=12
+                num_workers=12,
+                drop_last=True
             )
 
 
@@ -239,7 +240,8 @@ def training_process(args: TrainingArgs):
             batch_size=args.batch_size,
             pin_memory=True,
             sampler=sampler_train,
-            num_workers=12
+            num_workers=12,
+            drop_last=True
         )
 
 
