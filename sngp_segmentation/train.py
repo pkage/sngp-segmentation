@@ -331,6 +331,8 @@ def training_process(args: TrainingArgs):
             else:
                 loader_train = create_loader(ds_train, val_mode=False)
 
+            loader_train.sampler.set_epoch(epoch)
+
             train_ddp(
                 get_rank(),
                 device,
