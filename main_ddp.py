@@ -38,6 +38,7 @@ def parse_args():
     parser.add_argument('--coco_path', help='coco directory', type=Path, default='./coco_21')
     parser.add_argument('--deeplab_weights_path', help='deeplabv3 weights directory', type=Path, default='./deeplab_weights')
     parser.add_argument('--scratch_path', help='local scratch partition path', type=Path, default='./lscratch')
+    parser.add_argument('--checkpoint_path', help='model checkpoint location', type=Path, default='./lscratch/checkpoints')
     parser.add_argument('--dataset', help='dataset to use', default='pascal-voc')
     parser.add_argument('--model', help='model to use (one of deeplab, unet), default %(default)', default='unet', type=str)
     parser.add_argument('--model-weights', help='model weights to load (for deeplab)', default=None, type=str)
