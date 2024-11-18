@@ -22,7 +22,7 @@ def parse_args():
                         help='learning rate for Adam (default: %(default)s)')
     parser.add_argument('-p', '--patience', type=float, default=64,
                         help='number of epochs to train for without improvement (default: %(default)s)')
-    parser.add_argument('-i', '--iterations', type=float, default=5,
+    parser.add_argument('-i', '--train_iterations', type=float, default=5,
                         help='number of iteratons of self-training (default: %(default)s)')
     parser.add_argument('-pf', '--pl_fraction', type=float, default=0.05,
                         help='fraction of unlabeled examples to label in each iteration (default: %(default)s)')
