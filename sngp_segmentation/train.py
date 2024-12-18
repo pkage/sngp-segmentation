@@ -5,6 +5,7 @@ import shutil
 import time
 from dataclasses import dataclass, asdict
 from typing import Literal, Set
+from pprint import pprint
 
 import torch
 from torch.nn.parallel import DistributedDataParallel as DDP
@@ -190,6 +191,7 @@ def get_datasets(args: TrainingArgs):
 # -- training loops
 
 def training_process(args: TrainingArgs):
+    pprint(args)
     # convenience
     num_classes = 20 + 1
     rank = int(os.environ['RANK'])
@@ -263,19 +265,19 @@ def training_process(args: TrainingArgs):
             model = DeepLabV3_Resnet50(
                 3,
                 num_classes,
-                weights=args.model_weights
+                weights=args.deeplab_weights_path
             ).to(device)
         elif args.model == 'deep_ensemble':
             model = Stacked_DeepLabV3_Resnet50_Ensemble(
                 3,
                 num_classes,
-                weights=args.model_weights
+                weights=args.deeplab_weights_path
             ).to(device)
         elif args.model == 'sngp':
             model = SNGPDeepLabV3_Resnet50(
                 3,
                 num_classes,
-                weights=args.model_weights
+                weights=args.deeplab_weights_path
             ).to(device)
         else:
             raise ValueError(f'no such model {args.model}')

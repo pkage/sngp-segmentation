@@ -50,9 +50,9 @@ class SNGPDeepLabV3_Resnet50(nn.Module):
 
         if freeze_backbone:
             with torch.no_grad():
-                x = self.deeplab(x)['out']
+                x = self.deeplab(x.float())['out']
         else:
-            x = self.deeplab(x)['out']
+            x = self.deeplab(x.float())['out']
 
 
         return self.rfgp(x, with_variance, update_precision)
@@ -70,7 +70,7 @@ class DeepLabV3_Resnet50(nn.Module):
         
     def forward(self, x, **kwargs):
 
-        return self.deeplab(x)['out']
+        return self.deeplab(x.float())['out']
 
 
 class Stacked_DeepLabV3_Resnet50_Ensemble(torch.nn.Module):
@@ -109,7 +109,7 @@ class Stacked_DeepLabV3_Resnet50_Ensemble(torch.nn.Module):
         return torch.vmap(self.ensemble_wrapper, randomness='same')(self.params, self.buffers, data.unsqueeze(0).expand(self.members, -1, -1, -1, -1))
 
     def forward(self, x, with_variance=False, **kwargs):
-        predictions = self.ensemble_fwd(x)['out']
+        predictions = self.ensemble_fwd(x.float())['out']
 
         # based on: https://arxiv.org/abs/2006.10108
 

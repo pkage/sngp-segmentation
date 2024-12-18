@@ -38,14 +38,18 @@ export OMP_NUM_THREADS=16
 echo "beginning train..."
 # poetry run python main_ddp.py
 
-cd $PROJ_DIR && poetry run torchrun \
-    --nnodes 1 \
-    --nproc_per_node 1 \
-    --rdzv_id $RANDOM \
-    --rdzv_backend c10d \
-    --rdzv_endpoint "localhost:64425" \
-    main_ddp.py \
-    --batch_size 24 \
-    --test_batch_size 24 \
-    --model deeplab \
-    --checkpoint_path $LSCRATCH/checkpoints
+cd $PROJ_DIR && poetry run torchrun      \
+    --nnodes 1                           \
+    --nproc_per_node 1                   \
+    --rdzv_id $RANDOM                    \
+    --rdzv_backend c10d                  \
+    --rdzv_endpoint "localhost:64425"    \
+    main.py train                        \
+    --batch_size 24                      \
+    --model deeplab                      \
+    --dataset voc                        \
+    --cityscapes_path $LSCRATCH/datasets \
+    --strategy baseline                  \
+    --scratch_path $LSCRATCH             \
+    --checkpoint_path $LSCRATCH/checkpoints \
+    -lr 1e-4
