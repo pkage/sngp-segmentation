@@ -1,3 +1,5 @@
+export DOWNLOAD_FUNCTION_URL=https://ledoejtumvyg2uiumzgibwc2ze0zzjgx.lambda-url.us-east-2.on.aws
+export DOWNLOAD_FUNCTION_URL=https://ledoejtumvyg2uiumzgibwc2ze0zzjgx.lambda-url.us-east-2.on.aws
 mkdir -p $LSCRATCH/datasets
 
 if ! [ -f $LSCRATCH/datasets/gtFine_trainvaltest.zip ]; then

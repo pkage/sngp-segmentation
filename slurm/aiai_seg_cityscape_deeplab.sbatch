@@ -20,7 +20,6 @@ export LSCRATCH=/disk/scratch/s1734411/sngp-seg
 export TORCH_HUB=$LSCRATCH
 export TORCH_HOME=$LSCRATCH
 
-export DOWNLOAD_FUNCTION_URL=https://ledoejtumvyg2uiumzgibwc2ze0zzjgx.lambda-url.us-east-2.on.aws
 
 cd $PROJ_DIR
 
