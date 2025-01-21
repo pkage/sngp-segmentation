@@ -10,12 +10,16 @@ import torchvision
 from .utils import convleaves, getattrrecur, setattrrecur
 from .unet import RandomFeatureGaussianProcess, Cos
 
-def construct_deeplabv3_resnet50(weights: Path | None):
+def construct_deeplabv3_resnet50(
+        weights: Path | None,
+        num_classes
+    ):
     if weights:
         assert weights.exists()
 
     model = deeplabv3_resnet50(
-        weights=weights
+        weights=weights,
+        num_classes=num_classes
         # i think everything else should be okay as defaults, we're directly
         # comparing against a pascal-VOC baseline.
     )
@@ -26,7 +30,7 @@ def construct_deeplabv3_resnet50(weights: Path | None):
 class SNGPDeepLabV3_Resnet50(nn.Module):
     def __init__(self, n_channels, n_classes, bilinear=False, weights: Path | None = torchvision.models.segmentation.DeepLabV3_ResNet50_Weights.COCO_WITH_VOC_LABELS_V1):
         super().__init__()
-        module = construct_deeplabv3_resnet50(weights)
+        module = construct_deeplabv3_resnet50(weights, n_classes)
         
         for name, _ in convleaves(module):
             setattrrecur(module, name, spectral_norm(getattrrecur(module, name)))
@@ -61,7 +65,7 @@ class SNGPDeepLabV3_Resnet50(nn.Module):
 class DeepLabV3_Resnet50(nn.Module):
     def __init__(self, n_channels, n_classes, bilinear=False, weights: Path | None = torchvision.models.segmentation.DeepLabV3_ResNet50_Weights.COCO_WITH_VOC_LABELS_V1):
         super().__init__()
-        module = construct_deeplabv3_resnet50(weights)
+        module = construct_deeplabv3_resnet50(weights, n_classes)
         
         for name, _ in convleaves(module):
             setattrrecur(module, name, spectral_norm(getattrrecur(module, name)))
@@ -77,7 +81,7 @@ class Stacked_DeepLabV3_Resnet50_Ensemble(torch.nn.Module):
     def __init__(self, n_channels, n_classes, members=1, bilinear=False, weights: Path | None = torchvision.models.segmentation.DeepLabV3_ResNet50_Weights.COCO_WITH_VOC_LABELS_V1):
         super().__init__()
 
-        self.ensemble = [construct_deeplabv3_resnet50(weights) for _ in range(members)]
+        self.ensemble = [construct_deeplabv3_resnet50(weights, n_classes) for _ in range(members)]
 
         self.members = members
         """

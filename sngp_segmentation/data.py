@@ -3,9 +3,12 @@ from copy import deepcopy as copy
 import os
 from typing import Any, Dict
 
+
 from PIL import Image
+import einops
 import numpy as np
 import torch
+import torch.nn.functional as F
 from torch.utils.data import DataLoader, Dataset
 from torchvision.datasets import Cityscapes
 
@@ -170,7 +173,7 @@ class SplitVOCDataset:
         return len(self.dataset)
     
 
-class CityscapesLabelTransform(ABC):
+class LabelTransform(ABC):
     mapping: Dict
     
     def __init__(self):
@@ -180,7 +183,7 @@ class CityscapesLabelTransform(ABC):
     def build_mapping(self) -> Dict:
         pass
 
-    def __call__(self, target):
+    def apply_mapping(self, target):
         arr = np.array(target)
         
         out_arr = arr.copy()
@@ -190,9 +193,12 @@ class CityscapesLabelTransform(ABC):
             out_arr[idxs] = new_val
         
         return Image.fromarray(out_arr)
+    
+    def __call__(self, target):
+        return self.apply_mapping(target)
 
     
-class CityscapesCategoryTransform(CityscapesLabelTransform):
+class CityscapesCategoryTransform(LabelTransform):
     def build_mapping(self):
         mapping = {}
         for ctycls in Cityscapes.classes:
@@ -200,10 +206,55 @@ class CityscapesCategoryTransform(CityscapesLabelTransform):
         
         return mapping
 
-class CityscapesTrainIDTransform(CityscapesLabelTransform):
+class CityscapesTrainIDTransform(LabelTransform):
     def build_mapping(self):
         mapping = {}
         for ctycls in Cityscapes.classes:
             mapping[ctycls.id] = ctycls.train_id
         
         return mapping
+
+class VOCLabelTransform():
+    mapping: Dict
+    
+    def __init__(self):
+        self.mapping = self.build_mapping()
+        
+    def build_mapping(self):
+        return {
+            255: 21
+        }
+
+    def apply_mapping(self, target):
+        arr = np.array(target)
+        
+        out_arr = arr.copy()
+        for old_val, new_val in self.mapping.items():
+            # create list of indices we care about for this rule
+            idxs = arr == old_val
+            out_arr[idxs] = new_val
+        
+        return torch.tensor(out_arr).unsqueeze(0)
+    
+    def __call__(self, target):
+        return self.apply_mapping(target)
+    
+
+class OneHotLabelEncode:
+    n_classes: int
+
+    def __init__(self, n_classes):
+        self.n_classes = n_classes
+
+    def __call__(self, labels):
+        labels = labels.to(torch.int64)
+        one_hot = F.one_hot(
+            labels,
+            num_classes=self.n_classes
+        )
+        
+        # bad hack
+        if len(one_hot.shape) == 5:
+            one_hot = one_hot.squeeze(0)
+
+        return einops.rearrange(one_hot, 'b h w c -> b c h w').squeeze(0)

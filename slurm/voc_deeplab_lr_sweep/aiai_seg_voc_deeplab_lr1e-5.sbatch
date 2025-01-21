@@ -47,7 +47,7 @@ cd $PROJ_DIR && poetry run torchrun      \
     main.py train                        \
     --batch_size 24                      \
     --model deeplab                      \
-    --dataset voc                        \
+    --dataset pascal-voc                 \
     --cityscapes_path $LSCRATCH/datasets \
     --strategy baseline                  \
     --scratch_path $LSCRATCH             \

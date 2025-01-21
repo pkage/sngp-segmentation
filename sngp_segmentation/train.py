@@ -34,7 +34,7 @@ from yaml import Loader
 import functools
 
 from .utils import LabelToTensor, test_ddp, train_ddp, mpl_ddp, get_rank
-from .data import SplitVOCDataset, CityscapesCategoryTransform
+from .data import OneHotLabelEncode, SplitVOCDataset, CityscapesCategoryTransform, VOCLabelTransform
 from .unet import SNGPUnet
 from .sngp import SNGP_probe, SNGP_FPFT
 from .deeplab import SNGPDeepLabV3_Resnet50, Stacked_DeepLabV3_Resnet50_Ensemble, DeepLabV3_Resnet50
@@ -117,6 +117,7 @@ def copy_datasets(args: TrainingArgs):
 def get_datasets(args: TrainingArgs):
     if args.dataset == 'cityscapes':
         assert args.cityscapes_path is not None
+        n_classes = 8
 
         ds_train = Cityscapes(
             str(args.cityscapes_path), # shouldn't need string cast but it helps
@@ -130,7 +131,8 @@ def get_datasets(args: TrainingArgs):
             target_transform=Compose([
                 CityscapesCategoryTransform(),
                 transforms.Resize(256, interpolation=InterpolationMode.NEAREST),
-                PILToTensor()
+                PILToTensor(),
+                OneHotLabelEncode(n_classes)
             ])
         )
         ds_val  = Cityscapes(
@@ -145,13 +147,16 @@ def get_datasets(args: TrainingArgs):
             target_transform=Compose([
                 CityscapesCategoryTransform(),
                 transforms.Resize(256, interpolation=InterpolationMode.NEAREST),
-                PILToTensor()
+                PILToTensor(),
+                VOCLabelTransform(),
+                OneHotLabelEncode(n_classes)
             ])
         )
-        return ds_train, ds_val
+        return ds_train, ds_val, n_classes
 
     elif args.dataset == 'pascal-voc':
         assert args.voc_path is not None
+        n_classes = 20 + 1 + 1
 
         # imagenet transforms
         trans = transforms.Compose([
@@ -167,7 +172,9 @@ def get_datasets(args: TrainingArgs):
         target_trans = transforms.Compose([
             transforms.Resize(256, interpolation=InterpolationMode.NEAREST),
             transforms.CenterCrop(224),
-            LabelToTensor(255)
+            LabelToTensor(255),
+            VOCLabelTransform(),
+            OneHotLabelEncode(n_classes)
         ])
 
         ds_train = torchvision.datasets.VOCSegmentation(
@@ -184,7 +191,7 @@ def get_datasets(args: TrainingArgs):
             target_transform=target_trans,
             download=True
         )
-        return ds_train, ds_val
+        return ds_train, ds_val, n_classes
 
     else:
         raise ValueError(f'unknown dataset: {args.dataset}')
@@ -195,7 +202,6 @@ def get_datasets(args: TrainingArgs):
 def training_process(args: TrainingArgs):
     pprint(args)
     # convenience
-    num_classes = 20 + 1
     rank = int(os.environ['RANK'])
     world_size = int(os.environ['WORLD_SIZE'])
 
@@ -217,7 +223,8 @@ def training_process(args: TrainingArgs):
     dist.barrier()
 
     # load the datsets
-    ds_train, ds_val = get_datasets(args)
+    ds_train, ds_val, num_classes = get_datasets(args)
+    print('num_classes', num_classes)
 
     # make a function for creating loaders
     def create_loader(dataset, val_mode=False):
@@ -259,23 +266,27 @@ def training_process(args: TrainingArgs):
     # this is where the real branching happens
     def create_model():
         if args.model == 'unet':
+            print(f'creaing unet model with 3 input channels and {num_classes} outputs')
             model = SNGPUnet(
                 3,
                 num_classes,
             ).to(device)
         elif args.model == 'deeplab':
+            print(f'creaing deeplab model with 3 input channels and {num_classes} outputs')
             model = DeepLabV3_Resnet50(
                 3,
                 num_classes,
                 weights=args.deeplab_weights_path
             ).to(device)
         elif args.model == 'deep_ensemble':
+            print(f'creaing deep_ensemble model with 3 input channels and {num_classes} outputs')
             model = Stacked_DeepLabV3_Resnet50_Ensemble(
                 3,
                 num_classes,
                 weights=args.deeplab_weights_path
             ).to(device)
         elif args.model == 'sngp':
+            print(f'creaing sngb_deeplab model with 3 input channels and {num_classes} outputs')
             model = SNGPDeepLabV3_Resnet50(
                 3,
                 num_classes,
@@ -313,7 +324,8 @@ def training_process(args: TrainingArgs):
         return model, optimizer
 
     # shared between all processes
-    loss_fn = torch.nn.CrossEntropyLoss(ignore_index=255)
+    # loss_fn = torch.nn.CrossEntropyLoss(ignore_index=255)
+    loss_fn = torch.nn.BCEWithLogitsLoss()
     model, optimizer = create_model()
 
     if 'mpl' in args.strategy:
