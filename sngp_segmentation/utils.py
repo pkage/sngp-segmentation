@@ -1,12 +1,17 @@
 import torch
 import torch.distributed as dist
 import numpy as np
-from torchmetrics import JaccardIndex
+from torchmetrics.classification import MulticlassJaccardIndex
 import wandb
 import os
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 import gc
+
+import torchvision
+import torchvision.transforms.functional as TF
+import random
+from PIL import Image
 
 
 def setup():
@@ -78,8 +83,8 @@ def train_ddp(rank, device, epoch, model, loader, loss_fn, optimizer, accumulate
         output = model(X, freeze_backbone=epoch < warmup)  # ), update_precision=False)
 
         if jaccard is None:
-            jaccard = JaccardIndex(
-                task="multiclass", num_classes=output.shape[1], ignore_index=255
+            jaccard = MulticlassJaccardIndex(
+                num_classes=output.shape[1], ignore_index=255, average='macro', zero_division=1,
             ).to(device)
 
         loss = loss_fn(output, y.squeeze().type(torch.int64)) / accumulate
@@ -169,8 +174,8 @@ def mpl_ddp(
         )
 
         if jaccard is None:
-            jaccard = JaccardIndex(
-                task="multiclass", num_classes=output.shape[1], ignore_index=255
+            jaccard = MulticlassJaccardIndex(
+                num_classes=output.shape[1], ignore_index=255
             ).to(device)
 
         ddp_loss[0] += 0.0
@@ -228,8 +233,8 @@ def test_ddp(rank, device, model, loader, loss_fn):
             X, y = X.to(device), y.to(device)
             output = model(X, with_variance=False, update_precision=False)
             if jaccard is None:
-                jaccard = JaccardIndex(
-                    task="multiclass", num_classes=output.shape[1], ignore_index=255
+                jaccard = MulticlassJaccardIndex(
+                    num_classes=output.shape[1], ignore_index=255
                 ).to(device)
             loss = loss_fn(output, y.type(torch.int64))
             ddp_loss[0] += loss.item()
@@ -282,8 +287,8 @@ def train(device, epoch, model, loader, loss_fn, optimizer, accumulate=1):
         X, y = X.to(device), y.to(device)
         output = model(X, update_precision=False)
         if jaccard is None:
-            jaccard = JaccardIndex(
-                task="multiclass", num_classes=output.shape[1], ignore_index=255
+            jaccard = MulticlassJaccardIndex(
+                num_classes=output.shape[1], ignore_index=255
             ).to(device)
         loss = loss_fn(output, y.type(torch.int64))
         loss.backward()
@@ -324,8 +329,8 @@ def test(device, model, loader, loss_fn):
             X, y = X.to(device), y.to(device)
             output = model(X)
             if jaccard is None:
-                jaccard = JaccardIndex(
-                    task="multiclass", num_classes=output.shape[1], ignore_index=255
+                jaccard = MulticlassJaccardIndex(
+                    num_classes=output.shape[1], ignore_index=255
                 ).to(device)
             loss = loss_fn(output, y.squeeze().type(torch.int64))
             ddp_loss[0] += loss.item()
@@ -493,3 +498,20 @@ def MPL_Seg(
     teacher_optimizer.step()
     # return the student output for the batch
     return student_final_output
+    
+
+class LikeTransformDataset:
+    def __init__(self, ds, transform):
+        self.ds = ds
+        self.transform = transform
+
+    def __iter__(self):
+        for i in range(len(self)):
+            yield self[i]
+
+    def __len__(self):
+        return len(self.ds)
+    
+    def __getitem__(self, i):
+        x, y = self.ds[i]
+        return self.transform(x), self.transform(y)

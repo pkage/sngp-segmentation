@@ -23,6 +23,19 @@ def construct_deeplabv3_resnet50(weights: Path | None):
     return model
 
 
+def construct_deeplabv3_resnet101(weights: Path | None):
+    if weights:
+        assert weights.exists()
+
+    model = deeplabv3_resnet101(
+        weights=weights
+        # i think everything else should be okay as defaults, we're directly
+        # comparing against a pascal-VOC baseline.
+    )
+
+    return model
+
+
 class SNGPDeepLabV3_Resnet50(nn.Module):
     def __init__(self, n_channels, n_classes, bilinear=False, weights: Path | None = torchvision.models.segmentation.DeepLabV3_ResNet50_Weights.COCO_WITH_VOC_LABELS_V1):
         super().__init__()
@@ -59,12 +72,29 @@ class SNGPDeepLabV3_Resnet50(nn.Module):
     
 
 class DeepLabV3_Resnet50(nn.Module):
-    def __init__(self, n_channels, n_classes, bilinear=False, weights: Path | None = torchvision.models.segmentation.DeepLabV3_ResNet50_Weights.COCO_WITH_VOC_LABELS_V1):
+    def __init__(self, n_channels, n_classes, spectral_norm=False, weights: Path | None = torchvision.models.segmentation.DeepLabV3_ResNet50_Weights.COCO_WITH_VOC_LABELS_V1, **kwargs):
         super().__init__()
         module = construct_deeplabv3_resnet50(weights)
         
-        for name, _ in convleaves(module):
-            setattrrecur(module, name, spectral_norm(getattrrecur(module, name)))
+        if spectral_norm:
+            for name, _ in convleaves(module):
+                setattrrecur(module, name, spectral_norm(getattrrecur(module, name)))
+
+        self.deeplab = module
+        
+    def forward(self, x, **kwargs):
+
+        return self.deeplab(x)['out']
+
+
+class DeepLabV3_Resnet101(nn.Module):
+    def __init__(self, n_channels, n_classes, spectral_norm=False, weights: Path | None = torchvision.models.segmentation.DeepLabV3_ResNet101_Weights.COCO_WITH_VOC_LABELS_V1, **kwargs):
+        super().__init__()
+        module = construct_deeplabv3_resnet101(weights)
+        
+        if spectral_norm:
+            for name, _ in convleaves(module):
+                setattrrecur(module, name, spectral_norm(getattrrecur(module, name)))
 
         self.deeplab = module
         

@@ -33,11 +33,11 @@ import yaml
 from yaml import Loader
 import functools
 
-from .utils import LabelToTensor, test_ddp, train_ddp, mpl_ddp, get_rank
+from .utils import LabelToTensor, test_ddp, train_ddp, mpl_ddp, get_rank, LikeTransformDataset
 from .data import SplitVOCDataset
 from .unet import SNGPUnet
 from .sngp import SNGP_probe, SNGP_FPFT
-from .deeplab import SNGPDeepLabV3_Resnet50, Stacked_DeepLabV3_Resnet50_Ensemble, DeepLabV3_Resnet50
+from .deeplab import SNGPDeepLabV3_Resnet50, Stacked_DeepLabV3_Resnet50_Ensemble, DeepLabV3_Resnet50, DeepLabV3_Resnet101
 
 # --- CONFIGURATION ---
 
@@ -155,8 +155,8 @@ def get_datasets(args: TrainingArgs):
         # imagenet transforms
         trans = transforms.Compose([
             # transforms.Resize(),
-            transforms.CenterCrop(321),
             # torchvision.transforms.RandomCrop(321),
+            # torchvision.transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
             transforms.Normalize(
                 mean=[0.485, 0.456, 0.406], 
@@ -166,8 +166,18 @@ def get_datasets(args: TrainingArgs):
 
         target_trans = transforms.Compose([
             # transforms.Resize(512, interpolation=InterpolationMode.NEAREST),
-            transforms.CenterCrop(321),
             LabelToTensor(255)
+        ])
+
+        train_like_transform = transforms.Compose([
+            torchvision.transforms.CenterCrop(321),
+            # torchvision.transforms.RandomHorizontalFlip()
+        ])
+
+
+        val_like_transform = transforms.Compose([
+            torchvision.transforms.CenterCrop(321),
+            # torchvision.transforms.RandomHorizontalFlip()
         ])
 
         ds_train = torchvision.datasets.VOCSegmentation(
@@ -184,7 +194,7 @@ def get_datasets(args: TrainingArgs):
             target_transform=target_trans,
             download=True
         )
-        return ds_train, ds_val
+        return LikeTransformDataset(ds_train, train_like_transform), LikeTransformDataset(ds_val, val_like_transform)
 
     else:
         raise ValueError(f'unknown dataset: {args.dataset}')
