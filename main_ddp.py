@@ -10,9 +10,11 @@ load_dotenv()
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description='co-training')
+    parser = argparse.ArgumentParser(description='semi-supervised with calibrated uncertainty.')
 
     parser.add_argument('-e', '--epochs', type=int, default=25, 
+                        help='training epochs (default: %(default)s)')    
+    parser.add_argument('-a', '--accumulate', type=int, default=2, 
                         help='training epochs (default: %(default)s)')
     parser.add_argument('-b', '--batch_size', type=int, default=64, 
                         help='batch size for training (default: %(default)s)')
