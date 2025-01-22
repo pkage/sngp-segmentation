@@ -5,6 +5,7 @@ import shutil
 import time
 from dataclasses import dataclass, asdict
 from typing import Literal, Set
+import warnings
 
 import torch
 from torch.nn.parallel import DistributedDataParallel as DDP
@@ -48,6 +49,7 @@ class TrainingArgs:
     warmup: int
     batch_size: int
     test_batch_size: int
+    accumulate: int
 
     learning_rate: float
     patience: float
@@ -152,8 +154,9 @@ def get_datasets(args: TrainingArgs):
 
         # imagenet transforms
         trans = transforms.Compose([
-            transforms.Resize(256),
-            transforms.CenterCrop(224),
+            # transforms.Resize(),
+            transforms.CenterCrop(321),
+            # torchvision.transforms.RandomCrop(321),
             transforms.ToTensor(),
             transforms.Normalize(
                 mean=[0.485, 0.456, 0.406], 
@@ -162,8 +165,8 @@ def get_datasets(args: TrainingArgs):
         ])
 
         target_trans = transforms.Compose([
-            transforms.Resize(256, interpolation=InterpolationMode.NEAREST),
-            transforms.CenterCrop(224),
+            # transforms.Resize(512, interpolation=InterpolationMode.NEAREST),
+            transforms.CenterCrop(321),
             LabelToTensor(255)
         ])
 
@@ -306,14 +309,16 @@ def training_process(args: TrainingArgs):
             lr=args.learning_rate
         )
 
-        return model, optimizer
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, args.epochs)
+
+        return model, optimizer, scheduler
 
     # shared between all processes
     loss_fn = torch.nn.CrossEntropyLoss(ignore_index=255)
-    model, optimizer = create_model()
+    model, optimizer, scheduler = create_model()
 
     if 'mpl' in args.strategy:
-        teacher_model, teacher_optimizer = create_model()
+        teacher_model, teacher_optimizer, scheduler = create_model()
     else:
         teacher_model, teacher_optimizer = None, None
 
@@ -321,38 +326,45 @@ def training_process(args: TrainingArgs):
 
     for train_iteration in range(args.train_iterations):
         print(f'Starting iteration {train_iteration+1} of {args.train_iterations}...')
-        for epoch in range(args.epochs):
-            print(f'Epoch {epoch}/{args.epochs}')
 
-            # creating these on the fly
-            if 'self' in args.strategy:
-                assert ds_splitter is not None
-                loader_train = create_loader(ds_splitter.get_labeled(), val_mode=False)
-            else:
-                loader_train = create_loader(ds_train, val_mode=False)
+        if 'baseline' in args.strategy or 'self' in args.strategy:
+            for epoch in range(args.epochs):
+                print(f'Epoch {epoch}/{args.epochs}')
 
-            loader_train.sampler.set_epoch(epoch)
+                # creating these on the fly
+                if 'self' in args.strategy:
+                    assert ds_splitter is not None
+                    loader_train = create_loader(ds_splitter.get_labeled(), val_mode=False)
+                else:
+                    loader_train = create_loader(ds_train, val_mode=False)
 
-            train_ddp(
-                get_rank(),
-                device,
-                epoch,
-                model,
-                loader_train,
-                loss_fn,
-                optimizer,
-                accumulate=2
-            )
+                loader_train.sampler.set_epoch(epoch)
 
-            loader_val = create_loader(ds_val, val_mode=True)
+                train_ddp(
+                    get_rank(),
+                    device,
+                    epoch,
+                    model,
+                    loader_train,
+                    loss_fn,
+                    optimizer,
+                    accumulate=args.accumulate
+                )
 
-            test_ddp(
-                get_rank(),
-                device,
-                model,
-                loader_val,
-                loss_fn
-            )
+                loader_val = create_loader(ds_val, val_mode=True)
+
+                test_ddp(
+                    get_rank(),
+                    device,
+                    model,
+                    loader_val,
+                    loss_fn
+                )
+
+                scheduler.step(epoch=epoch)
+
+        if 'baseline' in args.strategy:
+            break
 
         if 'mpl' in args.strategy:
             dist.barrier()
@@ -373,7 +385,7 @@ def training_process(args: TrainingArgs):
                     loss_fn,
                     teacher_optimizer,
                     optimizer,
-                    accumulate=1
+                    accumulate=args.accumulate
                 )
 
                 test_ddp(
@@ -383,6 +395,9 @@ def training_process(args: TrainingArgs):
                     loader_val,
                     loss_fn
                 )
+            # single iteration for MPL
+            warnings.warn('MPL is a single iteration method.  If you specified iterations greater than 1 only one iteration will be performed.')
+            break
 
         if 'self' in args.strategy:
             assert ds_splitter is not None

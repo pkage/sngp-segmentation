@@ -82,7 +82,7 @@ def train_ddp(rank, device, epoch, model, loader, loss_fn, optimizer, accumulate
                 task="multiclass", num_classes=output.shape[1], ignore_index=255
             ).to(device)
 
-        loss = loss_fn(output, y.squeeze().type(torch.int64))
+        loss = loss_fn(output, y.squeeze().type(torch.int64)) / accumulate
         loss.backward()
         if step % accumulate == (accumulate - 1):
             optimizer.step()
