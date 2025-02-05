@@ -6,6 +6,7 @@ import time
 from dataclasses import dataclass, asdict
 from typing import Literal, Set
 import warnings
+from pprint import pprint
 
 import torch
 from torch.nn.parallel import DistributedDataParallel as DDP
@@ -35,6 +36,8 @@ import functools
 
 from .utils import LabelToTensor, test_ddp, train_ddp, mpl_ddp, get_rank, LikeTransformDataset
 from .data import SplitVOCDataset
+from .utils import LabelToTensor, test_ddp, train_ddp, mpl_ddp, get_rank
+from .data import OneHotLabelEncode, SplitVOCDataset, CityscapesCategoryTransform, VOCLabelTransform
 from .unet import SNGPUnet
 from .sngp import SNGP_probe, SNGP_FPFT
 from .deeplab import SNGPDeepLabV3_Resnet50, Stacked_DeepLabV3_Resnet50_Ensemble, DeepLabV3_Resnet50, DeepLabV3_Resnet101
@@ -118,6 +121,7 @@ def copy_datasets(args: TrainingArgs):
 def get_datasets(args: TrainingArgs):
     if args.dataset == 'cityscapes':
         assert args.cityscapes_path is not None
+        n_classes = 8
 
         ds_train = Cityscapes(
             str(args.cityscapes_path), # shouldn't need string cast but it helps
@@ -129,8 +133,10 @@ def get_datasets(args: TrainingArgs):
                 PILToTensor()
             ]),
             target_transform=Compose([
+                CityscapesCategoryTransform(),
                 transforms.Resize(256, interpolation=InterpolationMode.NEAREST),
-                PILToTensor()
+                PILToTensor(),
+                OneHotLabelEncode(n_classes)
             ])
         )
         ds_val  = Cityscapes(
@@ -143,14 +149,18 @@ def get_datasets(args: TrainingArgs):
                 PILToTensor()
             ]),
             target_transform=Compose([
+                CityscapesCategoryTransform(),
                 transforms.Resize(256, interpolation=InterpolationMode.NEAREST),
-                PILToTensor()
+                PILToTensor(),
+                VOCLabelTransform(),
+                OneHotLabelEncode(n_classes)
             ])
         )
-        return ds_train, ds_val
+        return ds_train, ds_val, n_classes
 
     elif args.dataset == 'pascal-voc':
         assert args.voc_path is not None
+        n_classes = 20 + 1 + 1
 
         # imagenet transforms
         trans = transforms.Compose([
@@ -165,8 +175,11 @@ def get_datasets(args: TrainingArgs):
         ])
 
         target_trans = transforms.Compose([
-            # transforms.Resize(512, interpolation=InterpolationMode.NEAREST),
-            LabelToTensor(255)
+            transforms.Resize(256, interpolation=InterpolationMode.NEAREST),
+            transforms.CenterCrop(224),
+            LabelToTensor(255),
+            VOCLabelTransform(),
+            OneHotLabelEncode(n_classes)
         ])
 
         train_like_transform = transforms.Compose([
@@ -194,7 +207,8 @@ def get_datasets(args: TrainingArgs):
             target_transform=target_trans,
             download=True
         )
-        return LikeTransformDataset(ds_train, train_like_transform), LikeTransformDataset(ds_val, val_like_transform)
+        return LikeTransformDataset(ds_train, train_like_transform), LikeTransformDataset(ds_val, val_like_transform), n_classes
+        # return ds_train, ds_val, n_classes
 
     else:
         raise ValueError(f'unknown dataset: {args.dataset}')
@@ -203,8 +217,8 @@ def get_datasets(args: TrainingArgs):
 # -- training loops
 
 def training_process(args: TrainingArgs):
+    pprint(args)
     # convenience
-    num_classes = 20 + 1
     rank = int(os.environ['RANK'])
     world_size = int(os.environ['WORLD_SIZE'])
 
@@ -226,7 +240,8 @@ def training_process(args: TrainingArgs):
     dist.barrier()
 
     # load the datsets
-    ds_train, ds_val = get_datasets(args)
+    ds_train, ds_val, num_classes = get_datasets(args)
+    print('num_classes', num_classes)
 
     # make a function for creating loaders
     def create_loader(dataset, val_mode=False):
@@ -268,27 +283,31 @@ def training_process(args: TrainingArgs):
     # this is where the real branching happens
     def create_model():
         if args.model == 'unet':
+            print(f'creaing unet model with 3 input channels and {num_classes} outputs')
             model = SNGPUnet(
                 3,
                 num_classes,
             ).to(device)
         elif args.model == 'deeplab':
+            print(f'creaing deeplab model with 3 input channels and {num_classes} outputs')
             model = DeepLabV3_Resnet50(
                 3,
                 num_classes,
-                weights=args.model_weights
+                weights=args.deeplab_weights_path
             ).to(device)
         elif args.model == 'deep_ensemble':
+            print(f'creaing deep_ensemble model with 3 input channels and {num_classes} outputs')
             model = Stacked_DeepLabV3_Resnet50_Ensemble(
                 3,
                 num_classes,
-                weights=args.model_weights
+                weights=args.deeplab_weights_path
             ).to(device)
         elif args.model == 'sngp':
+            print(f'creaing sngb_deeplab model with 3 input channels and {num_classes} outputs')
             model = SNGPDeepLabV3_Resnet50(
                 3,
                 num_classes,
-                weights=args.model_weights
+                weights=args.deeplab_weights_path
             ).to(device)
         else:
             raise ValueError(f'no such model {args.model}')
@@ -324,7 +343,8 @@ def training_process(args: TrainingArgs):
         return model, optimizer, scheduler
 
     # shared between all processes
-    loss_fn = torch.nn.CrossEntropyLoss(ignore_index=255)
+    # loss_fn = torch.nn.CrossEntropyLoss(ignore_index=255)
+    loss_fn = torch.nn.BCEWithLogitsLoss()
     model, optimizer, scheduler = create_model()
 
     if 'mpl' in args.strategy:
@@ -445,7 +465,7 @@ def fpft_training_process(args, state_dict=None):
 
     # load the voc file into our scratch space
 
-    ds_train, ds_val = get_datasets(args)
+    ds_train, ds_val, _ = get_datasets(args)
 
     loader_train = DataLoader(ds_train, batch_size=args.batch_size, pin_memory=True, shuffle=True, num_workers=12)
     loader_val = DataLoader(ds_val, batch_size=args.test_batch_size, pin_memory=True, shuffle=False, num_workers=12)

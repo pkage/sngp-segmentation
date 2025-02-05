@@ -5,10 +5,10 @@
 #SBATCH --ntasks=1
 #SBATCH --mem=64G
 #SBATCH --gres=gpu:A40:1
-#SBATCH --output=/home/s1734411/sngp-segmentation/slurm/stdout_pvc_dpl.txt
-#SBATCH --error=/home/s1734411/sngp-segmentation/slurm/stderr_pvc_dpl.txt
+#SBATCH --output=/home/s1734411/sngp-segmentation/slurm/stdout_cty_dpl_lr1e-5.txt
+#SBATCH --error=/home/s1734411/sngp-segmentation/slurm/stderr_cty_dpl_lr1e-5.txt
 #SBATCH --time=12:00:00
-#SBATCH --job-name=sngp_pvc_dpl
+#SBATCH --job-name=sngp_cty_dpl_lr1e-5
 #SBATCH --mail-user=p.kage@ed.ac.uk
 #SBATCH --mail-type=ALL
 #SBATCH --chdir=/home/s1734411/sngp-segmentation/
@@ -20,6 +20,8 @@ export LSCRATCH=/disk/scratch/s1734411/sngp-seg
 export TORCH_HUB=$LSCRATCH
 export TORCH_HOME=$LSCRATCH
 
+export DOWNLOAD_FUNCTION_URL=https://ledoejtumvyg2uiumzgibwc2ze0zzjgx.lambda-url.us-east-2.on.aws
+
 cd $PROJ_DIR
 
 # load python, ensure the env is installed
@@ -27,8 +29,6 @@ export PATH=/home/s1734411/py3.11.4/bin:$PATH
 cd $PROJ_DIR
 
 #
-mkdir -p $LSCRATCH/datasets
-
 source ./slurm/dataset_download.sh
 
 # perf tuning
@@ -47,9 +47,10 @@ cd $PROJ_DIR && poetry run torchrun      \
     main.py train                        \
     --batch_size 24                      \
     --model deeplab                      \
-    --dataset pascal-voc                 \
+    --dataset cityscapes                 \
     --cityscapes_path $LSCRATCH/datasets \
     --strategy baseline                  \
     --scratch_path $LSCRATCH             \
-    --checkpoint_path $LSCRATCH/checkpoints \
-    -lr 1e-4
+    --epochs 64 \
+    -lr 1e-5
+

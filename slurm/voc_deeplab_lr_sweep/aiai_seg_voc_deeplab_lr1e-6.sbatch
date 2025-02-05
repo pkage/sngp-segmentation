@@ -5,10 +5,10 @@
 #SBATCH --ntasks=1
 #SBATCH --mem=64G
 #SBATCH --gres=gpu:A40:1
-#SBATCH --output=/home/s1734411/sngp-segmentation/slurm/stdout_pvc_dpl.txt
-#SBATCH --error=/home/s1734411/sngp-segmentation/slurm/stderr_pvc_dpl.txt
+#SBATCH --output=/home/s1734411/sngp-segmentation/slurm/stdout_pvc_dpl_lr1e-6.txt
+#SBATCH --error=/home/s1734411/sngp-segmentation/slurm/stderr_pvc_dpl_lr1e-6.txt
 #SBATCH --time=12:00:00
-#SBATCH --job-name=sngp_pvc_dpl
+#SBATCH --job-name=sngp_pvc_dpl_lr1e-6
 #SBATCH --mail-user=p.kage@ed.ac.uk
 #SBATCH --mail-type=ALL
 #SBATCH --chdir=/home/s1734411/sngp-segmentation/
@@ -51,5 +51,4 @@ cd $PROJ_DIR && poetry run torchrun      \
     --cityscapes_path $LSCRATCH/datasets \
     --strategy baseline                  \
     --scratch_path $LSCRATCH             \
-    --checkpoint_path $LSCRATCH/checkpoints \
-    -lr 1e-4
+    -lr 1e-5

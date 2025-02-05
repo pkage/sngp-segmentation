@@ -20,7 +20,6 @@ export LSCRATCH=/disk/scratch/s1734411/sngp-seg
 export TORCH_HUB=$LSCRATCH
 export TORCH_HOME=$LSCRATCH
 
-export DOWNLOAD_FUNCTION_URL=https://ledoejtumvyg2uiumzgibwc2ze0zzjgx.lambda-url.us-east-2.on.aws
 
 cd $PROJ_DIR
 
@@ -50,5 +49,7 @@ cd $PROJ_DIR && poetry run torchrun      \
     --dataset cityscapes                 \
     --cityscapes_path $LSCRATCH/datasets \
     --strategy baseline                  \
-    --scratch_path $LSCRATCH
+    --scratch_path $LSCRATCH             \
+    --checkpoint_path $LSCRATCH/checkpoints \
+    -lr 1e-4
 

@@ -1,3 +1,5 @@
+export DOWNLOAD_FUNCTION_URL=https://ledoejtumvyg2uiumzgibwc2ze0zzjgx.lambda-url.us-east-2.on.aws
+export DOWNLOAD_FUNCTION_URL=https://ledoejtumvyg2uiumzgibwc2ze0zzjgx.lambda-url.us-east-2.on.aws
 mkdir -p $LSCRATCH/datasets
 
 if ! [ -f $LSCRATCH/datasets/gtFine_trainvaltest.zip ]; then
@@ -20,7 +22,7 @@ if ! [ -d $LSCRATCH/datasets/leftImg8bit ]; then
 else
     echo "leftImg8bit_trainvaltest.zip has already been unzipped."
 fi
-if ! [ -d $LSCRATCH/datasets/gtFine_trainvaltest ]; then
+if ! [ -d $LSCRATCH/datasets/gtFine ]; then
     echo "gtFine_trainvaltest.zip has not been unzipped, expanding now..."
     cd $LSCRATCH/datasets/ && unzip gtFine_trainvaltest.zip
 else

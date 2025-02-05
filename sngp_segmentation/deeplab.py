@@ -10,12 +10,16 @@ import torchvision
 from .utils import convleaves, getattrrecur, setattrrecur
 from .unet import RandomFeatureGaussianProcess, Cos
 
-def construct_deeplabv3_resnet50(weights: Path | None):
+def construct_deeplabv3_resnet50(
+        weights: Path | None,
+        num_classes
+    ):
     if weights:
         assert weights.exists()
 
     model = deeplabv3_resnet50(
-        weights=weights
+        weights=weights,
+        num_classes=num_classes
         # i think everything else should be okay as defaults, we're directly
         # comparing against a pascal-VOC baseline.
     )
@@ -39,7 +43,7 @@ def construct_deeplabv3_resnet101(weights: Path | None):
 class SNGPDeepLabV3_Resnet50(nn.Module):
     def __init__(self, n_channels, n_classes, bilinear=False, weights: Path | None = torchvision.models.segmentation.DeepLabV3_ResNet50_Weights.COCO_WITH_VOC_LABELS_V1):
         super().__init__()
-        module = construct_deeplabv3_resnet50(weights)
+        module = construct_deeplabv3_resnet50(weights, n_classes)
         
         for name, _ in convleaves(module):
             setattrrecur(module, name, spectral_norm(getattrrecur(module, name)))
@@ -63,9 +67,9 @@ class SNGPDeepLabV3_Resnet50(nn.Module):
 
         if freeze_backbone:
             with torch.no_grad():
-                x = self.deeplab(x)['out']
+                x = self.deeplab(x.float())['out']
         else:
-            x = self.deeplab(x)['out']
+            x = self.deeplab(x.float())['out']
 
 
         return self.rfgp(x, with_variance, update_precision)
@@ -74,7 +78,7 @@ class SNGPDeepLabV3_Resnet50(nn.Module):
 class DeepLabV3_Resnet50(nn.Module):
     def __init__(self, n_channels, n_classes, spectral_norm=False, weights: Path | None = torchvision.models.segmentation.DeepLabV3_ResNet50_Weights.COCO_WITH_VOC_LABELS_V1, **kwargs):
         super().__init__()
-        module = construct_deeplabv3_resnet50(weights)
+        module = construct_deeplabv3_resnet50(weights, n_classes)
         
         if spectral_norm:
             for name, _ in convleaves(module):
@@ -100,14 +104,14 @@ class DeepLabV3_Resnet101(nn.Module):
         
     def forward(self, x, **kwargs):
 
-        return self.deeplab(x)['out']
+        return self.deeplab(x.float())['out']
 
 
 class Stacked_DeepLabV3_Resnet50_Ensemble(torch.nn.Module):
     def __init__(self, n_channels, n_classes, members=1, bilinear=False, weights: Path | None = torchvision.models.segmentation.DeepLabV3_ResNet50_Weights.COCO_WITH_VOC_LABELS_V1):
         super().__init__()
 
-        self.ensemble = [construct_deeplabv3_resnet50(weights) for _ in range(members)]
+        self.ensemble = [construct_deeplabv3_resnet50(weights, n_classes) for _ in range(members)]
 
         self.members = members
         """
@@ -139,7 +143,7 @@ class Stacked_DeepLabV3_Resnet50_Ensemble(torch.nn.Module):
         return torch.vmap(self.ensemble_wrapper, randomness='same')(self.params, self.buffers, data.unsqueeze(0).expand(self.members, -1, -1, -1, -1))
 
     def forward(self, x, with_variance=False, **kwargs):
-        predictions = self.ensemble_fwd(x)['out']
+        predictions = self.ensemble_fwd(x.float())['out']
 
         # based on: https://arxiv.org/abs/2006.10108
 

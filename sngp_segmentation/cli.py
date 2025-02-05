@@ -1,4 +1,5 @@
 import click
+import os
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -15,7 +16,7 @@ def cli():
 @click.option('-b', '--batch_size', type=int, required=True, help='number of instances per batch (shared betwen training)')
 @click.option('-lr', '--learning_rate', type=float, default=1e-4, help='learning rate for Adam (default 1e-4)')
 @click.option('-p', '--patience', type=float, default=64, help='number of epochs to train for without improvement (default: 64)')
-@click.option('-i', '--iterations', type=float, default=10, help='number of iteratons of self-training (default: 10)')
+@click.option('-i', '--iterations', type=int, default=10, help='number of iteratons of self-training (default: 10)')
 @click.option('-pf', '--pl_fraction', type=float, default=0.05,
                     help='fraction of unlabeled examples to label in each iteration (default: 0.05)')
 @click.option('-rep', '--with_replacement', type=bool, is_flag=True,
@@ -67,13 +68,13 @@ def train(
         train_iterations=iterations,
         pl_fraction=pl_fraction,
         
-        scratch_path=scratch_path,
-        checkpoint_path=checkpoint_path,
+        scratch_path=Path(scratch_path) if scratch_path is not None else Path(os.environ['LSCRATCH']),
+        checkpoint_path=Path(checkpoint_path) if checkpoint_path is not None else Path(os.environ['LSCRATCH']) / 'checkpoints',
 
-        cityscapes_path=Path(cityscapes_path),
-        voc_path=voc_path,
-        coco_path=coco_path,
-        deeplab_weights_path=model_weights,
+        cityscapes_path=Path(cityscapes_path) if cityscapes_path is not None else None,
+        voc_path=Path(voc_path) if voc_path is not None else None,
+        coco_path=Path(coco_path) if coco_path is not None else None,
+        deeplab_weights_path=Path(model_weights) if model_weights is not None else None,
 
         fsdp=fsdp,
         with_replacement=with_replacement
