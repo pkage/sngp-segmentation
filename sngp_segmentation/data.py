@@ -142,7 +142,7 @@ class SplitVOCDataset:
         return label_paths
 
 
-    def pseudo_label(self, model, num_examples=0.05, with_replacement=True, batch_size=32):
+    def pseudo_label(self, model, num_examples=0.05, with_replacement=True, batch_size=8):
         if isinstance(num_examples, float):
             num_examples = int(num_examples*len(self.unlabeled))
 
@@ -240,7 +240,11 @@ class VOCLabelTransform():
     
     def __call__(self, target):
         return self.apply_mapping(target)
-    
+
+
+def slice_off_last_channel(img):
+    return img[:-1]
+
 
 class OneHotLabelEncode:
     n_classes: int
@@ -250,17 +254,17 @@ class OneHotLabelEncode:
 
     def __call__(self, labels):
         labels = labels.to(torch.int64)
+
         one_hot = F.one_hot(
             labels,
             num_classes=self.n_classes
         )
-        
+
         # bad hack
         if len(one_hot.shape) == 5:
             one_hot = one_hot.squeeze(0)
 
         return einops.rearrange(one_hot, 'b h w c -> b c h w').squeeze(0)
-
 
 
 class UnlabeledImageDataset(Dataset):
