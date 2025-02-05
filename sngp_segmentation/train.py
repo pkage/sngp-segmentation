@@ -35,7 +35,8 @@ from .data import (
     OneHotLabelEncode,
     SplitVOCDataset,
     VOCLabelTransform,
-    UnlabeledImageDataset
+    UnlabeledImageDataset,
+    slice_off_last_channel
 )
 from .deeplab import (
     DeepLabV3_Resnet101,
@@ -173,7 +174,7 @@ def get_datasets(args: TrainingArgs):
 
     elif args.dataset == 'pascal-voc' or args.dataset == 'coco':
         assert args.voc_path is not None
-        n_classes = 20 + 1 + 1
+        n_classes = 20 + 1
 
         # imagenet transforms
         trans = transforms.Compose([
@@ -188,11 +189,10 @@ def get_datasets(args: TrainingArgs):
         ])
 
         target_trans = transforms.Compose([
-            transforms.Resize(256, interpolation=InterpolationMode.NEAREST),
-            transforms.CenterCrop(224),
             LabelToTensor(255),
             VOCLabelTransform(),
-            OneHotLabelEncode(n_classes)
+            OneHotLabelEncode(n_classes + 1),
+            slice_off_last_channel
         ])
 
         train_like_transform = transforms.Compose([
@@ -220,8 +220,10 @@ def get_datasets(args: TrainingArgs):
             target_transform=target_trans,
             download=True
         )
+
         # if we're just doing pascal-voc, ditch here
         if args.dataset == 'pascal-voc':
+            assert ds_train[0][1].shape[0] == 21 and ds_val[0][1].shape[0] == 21, ds_val[0][1].shape[0]
             return LikeTransformDataset(ds_train, train_like_transform), LikeTransformDataset(ds_val, val_like_transform), n_classes
 
 
