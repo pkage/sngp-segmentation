@@ -10,12 +10,18 @@ import torchvision
 from .utils import convleaves, getattrrecur, setattrrecur
 from .unet import RandomFeatureGaussianProcess, Cos
 
+<<<<<<< HEAD
 def construct_deeplabv3_resnet50(
         weights: Path | None,
         num_classes
     ):
     if weights:
         assert weights.exists()
+=======
+def construct_deeplabv3_resnet50(weights: Path | None):
+    # if weights:
+    #     assert weights.exists()
+>>>>>>> fc2d9cd (update the sngp code - fix a bug with the ds splitter, ambiguity with the deeplab weights, a bug with the liketransform datase)
 
     model = deeplabv3_resnet50(
         weights=weights,
@@ -28,8 +34,8 @@ def construct_deeplabv3_resnet50(
 
 
 def construct_deeplabv3_resnet101(weights: Path | None):
-    if weights:
-        assert weights.exists()
+    # if weights:
+    #     assert weights.exists()
 
     model = deeplabv3_resnet101(
         weights=weights

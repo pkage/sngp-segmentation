@@ -528,6 +528,14 @@ class LikeTransformDataset:
         self.ds = ds
         self.transform = transform
 
+    @property
+    def images(self):
+        return self.ds.images
+    
+    @property
+    def masks(self):
+        return self.ds.masks
+
     def __iter__(self):
         for i in range(len(self)):
             yield self[i]

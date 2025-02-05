@@ -75,6 +75,7 @@ class TrainingArgs:
 
     train_iterations: int
     pl_fraction: float
+    ul_fraction: float
 
     scratch_path: Path
     checkpoint_path: Path | None # default to scratch_path / 'checkpoints'
@@ -306,7 +307,7 @@ def training_process(args: TrainingArgs):
     
 
     if 'self' in args.strategy:
-        ds_splitter = SplitVOCDataset(ds_train, fraction_labeled=args.pl_fraction)
+        ds_splitter = SplitVOCDataset(ds_train, fraction_labeled=args.ul_fraction)
     else:
         ds_splitter = None
 
@@ -323,21 +324,21 @@ def training_process(args: TrainingArgs):
             model = DeepLabV3_Resnet50(
                 3,
                 num_classes,
-                weights=args.deeplab_weights_path
+                # weights=args.deeplab_weights_path
             ).to(device)
         elif args.model == 'deep_ensemble':
             print(f'creaing deep_ensemble model with 3 input channels and {num_classes} outputs')
             model = Stacked_DeepLabV3_Resnet50_Ensemble(
                 3,
                 num_classes,
-                weights=args.deeplab_weights_path
+                # weights=args.deeplab_weights_path
             ).to(device)
         elif args.model == 'sngp':
             print(f'creaing sngb_deeplab model with 3 input channels and {num_classes} outputs')
             model = SNGPDeepLabV3_Resnet50(
                 3,
                 num_classes,
-                weights=args.deeplab_weights_path
+                # weights=args.deeplab_weights_path
             ).to(device)
         else:
             raise ValueError(f'no such model {args.model}')
