@@ -1,8 +1,9 @@
 from abc import ABC, abstractmethod
 from copy import deepcopy as copy
+import glob
 import os
-from typing import Any, Dict
-
+from pathlib import Path
+from typing import Any, Dict, List
 
 from PIL import Image
 import einops
@@ -11,6 +12,7 @@ import torch
 import torch.nn.functional as F
 from torch.utils.data import DataLoader, Dataset
 from torchvision.datasets import Cityscapes
+from torchvision.datasets.folder import default_loader
 
 
 class SplitVOCDataset:
@@ -258,3 +260,33 @@ class OneHotLabelEncode:
             one_hot = one_hot.squeeze(0)
 
         return einops.rearrange(one_hot, 'b h w c -> b c h w').squeeze(0)
+
+
+
+class UnlabeledImageDataset(Dataset):
+    def __init__(self, root_path: Path | str, file_types: List[str] = ['png', 'jpg'], transform=None):
+        """
+        Load a folder of images without labels
+        """
+        
+        # build a glob list
+        glob_targets = [f'{root_path}/**/*.{ft}' for ft in file_types]
+        image_paths = []
+        for target in glob_targets:
+            image_paths += glob.glob(target)
+        
+        self.image_paths = image_paths
+        self.transform = transform
+
+    def __len__(self):
+        return len(self.image_paths)
+
+    def __getitem__(self, idx):
+        img_path = self.image_paths[idx]
+        image = default_loader(img_path)  # Loads image as PIL.Image probably
+        
+        if self.transform:
+            image = self.transform(image)
+
+        return image
+

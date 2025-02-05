@@ -1,46 +1,58 @@
 import copy
+from dataclasses import asdict, dataclass
+import functools
 import os
 from pathlib import Path
+from pprint import pprint
 import shutil
 import time
-from dataclasses import dataclass, asdict
 from typing import Literal, Set
 import warnings
-from pprint import pprint
 
 import torch
-from torch.nn.parallel import DistributedDataParallel as DDP
+import torch.distributed as dist
 from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
 from torch.distributed.fsdp import MixedPrecision
 from torch.distributed.fsdp.fully_sharded_data_parallel import (
-    CPUOffload,
     BackwardPrefetch,
+    CPUOffload,
 )
-from torch.distributed.fsdp.wrap import (
-    size_based_auto_wrap_policy,
-    enable_wrap,
-    wrap,
-)
+from torch.distributed.fsdp.wrap import enable_wrap, size_based_auto_wrap_policy, wrap
+from torch.nn.parallel import DistributedDataParallel as DDP
 import torch.optim as optim
-import torch.distributed as dist
-from torch.utils.data import DataLoader, DistributedSampler
+from torch.utils.data import ConcatDataset, DataLoader, DistributedSampler
 import torchvision
 from torchvision import transforms
-from torchvision.transforms.functional import InterpolationMode
 from torchvision.datasets import Cityscapes
 from torchvision.transforms import Compose, PILToTensor
+from torchvision.transforms.functional import InterpolationMode
 import wandb
 import yaml
 from yaml import Loader
-import functools
 
-from .utils import LabelToTensor, test_ddp, train_ddp, mpl_ddp, get_rank, LikeTransformDataset
-from .data import SplitVOCDataset
-from .utils import LabelToTensor, test_ddp, train_ddp, mpl_ddp, get_rank
-from .data import OneHotLabelEncode, SplitVOCDataset, CityscapesCategoryTransform, VOCLabelTransform
+from .data import (
+    CityscapesCategoryTransform,
+    OneHotLabelEncode,
+    SplitVOCDataset,
+    VOCLabelTransform,
+    UnlabeledImageDataset
+)
+from .deeplab import (
+    DeepLabV3_Resnet101,
+    DeepLabV3_Resnet50,
+    SNGPDeepLabV3_Resnet50,
+    Stacked_DeepLabV3_Resnet50_Ensemble,
+)
+from .sngp import SNGP_FPFT, SNGP_probe
 from .unet import SNGPUnet
-from .sngp import SNGP_probe, SNGP_FPFT
-from .deeplab import SNGPDeepLabV3_Resnet50, Stacked_DeepLabV3_Resnet50_Ensemble, DeepLabV3_Resnet50, DeepLabV3_Resnet101
+from .utils import (
+    LabelToTensor,
+    LikeTransformDataset,
+    get_rank,
+    mpl_ddp,
+    test_ddp,
+    train_ddp,
+)
 
 # --- CONFIGURATION ---
 
@@ -158,7 +170,7 @@ def get_datasets(args: TrainingArgs):
         )
         return ds_train, ds_val, n_classes
 
-    elif args.dataset == 'pascal-voc':
+    elif args.dataset == 'pascal-voc' or args.dataset == 'coco':
         assert args.voc_path is not None
         n_classes = 20 + 1 + 1
 
@@ -207,7 +219,25 @@ def get_datasets(args: TrainingArgs):
             target_transform=target_trans,
             download=True
         )
-        return LikeTransformDataset(ds_train, train_like_transform), LikeTransformDataset(ds_val, val_like_transform), n_classes
+        # if we're just doing pascal-voc, ditch here
+        if args.dataset == 'pascal-voc':
+            return LikeTransformDataset(ds_train, train_like_transform), LikeTransformDataset(ds_val, val_like_transform), n_classes
+
+
+        assert args.coco_path is not None, 'must specify a coco path to use coco-augmented voc'
+        ds_train_coco = UnlabeledImageDataset(
+            args.coco_path,
+            file_types=['jpg'],
+            transform=trans
+        )
+
+        ds_train_joint = ConcatDataset([
+            LikeTransformDataset(ds_train, train_like_transform),
+            ds_train_coco
+        ])
+
+        return ds_train_joint, LikeTransformDataset(ds_val, val_like_transform), n_classes
+
         # return ds_train, ds_val, n_classes
 
     else:
