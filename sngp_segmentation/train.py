@@ -138,7 +138,7 @@ def get_datasets(args: TrainingArgs):
         ds_train = Cityscapes(
             str(args.cityscapes_path), # shouldn't need string cast but it helps
             split='train',
-            mode='fine',
+            mode='coarse',
             target_type='semantic',
             transform=Compose([
                 transforms.Resize(256, interpolation=InterpolationMode.NEAREST),
@@ -154,7 +154,7 @@ def get_datasets(args: TrainingArgs):
         ds_val  = Cityscapes(
             str(args.cityscapes_path),
             split='test',
-            mode='fine',
+            mode='coarse',
             target_type='semantic',
             transform=Compose([
                 transforms.Resize(256, interpolation=InterpolationMode.NEAREST),
