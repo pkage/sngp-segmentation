@@ -66,7 +66,7 @@ def train(
         dataset=dataset,
 
         train_iterations=iterations,
-        pl_fraction=pl_fraction,
+        ul_fraction=pl_fraction,
         
         scratch_path=Path(scratch_path) if scratch_path is not None else Path(os.environ['LSCRATCH']),
         checkpoint_path=Path(checkpoint_path) if checkpoint_path is not None else Path(os.environ['LSCRATCH']) / 'checkpoints',

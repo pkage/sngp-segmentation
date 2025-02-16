@@ -75,7 +75,6 @@ class TrainingArgs:
     dataset: Literal['cityscapes', 'pascal-voc', 'coco']
 
     train_iterations: int
-    pl_fraction: float
     ul_fraction: float
 
     scratch_path: Path
@@ -111,7 +110,7 @@ def validate_args(args: TrainingArgs):
 
     if 'self' in args.strategy:
         assert args.train_iterations > 0
-        assert args.pl_fraction >= 0
+        assert args.ul_fraction >= 0
 # --- DATASET LOADING ---
 
     
@@ -464,7 +463,7 @@ def training_process(args: TrainingArgs):
 
         if 'self' in args.strategy:
             assert ds_splitter is not None
-            ds_splitter.pseudo_label(model, args.pl_fraction, args.with_replacement)
+            ds_splitter.pseudo_label(model, args.ul_fraction, args.with_replacement)
         
         dist.barrier()
         
@@ -670,7 +669,7 @@ def self_training_process(args):
 
         model.load_state_dict(best_state)
         ds.reset()
-        ds.pseudo_label(model, args.pl_fraction, args.with_replacement)
+        ds.pseudo_label(model, args.ul_fraction, args.with_replacement)
         ds_train = ds.get_labeled()
         loader_train = DataLoader(ds_train, batch_size=args.batch_size, pin_memory=True, shuffle=True, num_workers=12, drop_last=True)
 
