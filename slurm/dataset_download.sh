@@ -55,6 +55,13 @@ else
     echo "train2014.zip has already been unzipped."
 fi
 
+# ... and the voc
+if ! [ -f $LSCRATCH/datasets/VOCtrainval_11-May-2012.tar ]; then
+    echo "voc not found, downloading..."
+    cd $LSCRATCH/datasets/ && curl -L -O -J http://host.robots.ox.ac.uk/pascal/VOC/voc2012/VOCtrainval_11-May-2012.tar
+else
+    echo "voc has been downloaded already"
+fi
 
 echo "downloading weights..."
 if ! [ -f $LSCRATCH/pretrained/best_deeplabv3plus_resnet101_cityscapes_os16.pth ]; then
@@ -70,10 +77,4 @@ else
     echo "train2014.zip has already been unzipped."
 fi
 
-# ... and the voc
-# if ! [ -f ./VOCtrainval_11-May-2012.tar ]; then
-#     echo "voc not found, downloading..."
-#     curl -L -O -J http://host.robots.ox.ac.uk/pascal/VOC/voc2012/VOCtrainval_11-May-2012.tar
-# else
-#     echo "voc has been downloaded already"
-# fi
+
