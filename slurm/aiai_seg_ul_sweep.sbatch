@@ -52,5 +52,5 @@ cd $PROJ_DIR && poetry run torchrun      \
     --strategy self                      \
     --accumulate 2                       \
     --scratch_path $LSCRATCH             \
-    --checkpoint_path $LSCRATCH/ckpts    \
-    --voc_path $LSCRATCH/datasets        
+    --checkpoint_path $LSCRATCH/ckpts    #\
+    # --voc_path $LSCRATCH/datasets        
