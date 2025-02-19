@@ -1,10 +1,15 @@
 import argparse
 from pathlib import Path
+import os
+import torch
 
 from dotenv import load_dotenv
 
 from sngp_segmentation.train import training_process
 from sngp_segmentation.utils import cleanup, get_rank, setup, wandb_setup
+from dahps import DistributedAsynchronousRandomSearch as DARS
+from dahps.torch_utils import sync_parameters
+from config import experiment_config as config
 
 load_dotenv()
 
@@ -55,12 +60,33 @@ def parse_args():
 def main():
     args = parse_args()
 
+    setup()
+
     if get_rank() == 0:
         wandb_setup(args)
 
-    setup()
-    training_process(args)
+    rank = int(os.environ["RANK"])
+
+    device = rank % torch.cuda.device_count()
+    print(f"rank {rank} running on device {device} (of {torch.cuda.device_count()})")
+    torch.cuda.set_device(device)
+
+    agent = DARS.from_config(args.path, config)
+
+    agent = sync_parameters(rank, agent)
+
+    args = agent.update_namespace(args)
+
+    states, metric = training_process(args)
+
+    if rank == 0:
+        print("saving checkpoint")
+        agent.save_checkpoint(states)
+        agent.finish_combination(metric)
+
+    print("cleanup")
     cleanup()
+
 
 
 if __name__ == '__main__':
