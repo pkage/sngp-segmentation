@@ -159,7 +159,8 @@ class Stacked_DeepLabV3_Resnet50_Ensemble(torch.nn.Module):
               return pred, unc
           else:
               # return the calibrated prediction
-              return torch.mean(predictions, 0) / (1 + (0.3*torch.var(predictions, 0)))**(0.5)
+              return torch.mean(predictions, 0)
+              # return torch.mean(predictions, 0) / (1 + (0.3*torch.var(predictions, 0)))**(0.5)
         else:
           return torch.mean(predictions, 0)
 

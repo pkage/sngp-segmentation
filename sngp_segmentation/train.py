@@ -190,9 +190,9 @@ def get_datasets(args: TrainingArgs):
 
         target_trans = transforms.Compose([
             LabelToTensor(255),
-            VOCLabelTransform(),
-            OneHotLabelEncode(n_classes + 1),
-            slice_off_last_channel
+            # VOCLabelTransform(),
+            # OneHotLabelEncode(n_classes + 1),
+            # slice_off_last_channel
         ])
 
         train_like_transform = transforms.Compose([
@@ -223,7 +223,7 @@ def get_datasets(args: TrainingArgs):
 
         # if we're just doing pascal-voc, ditch here
         if args.dataset == 'pascal-voc':
-            assert ds_train[0][1].shape[0] == 21 and ds_val[0][1].shape[0] == 21, ds_val[0][1].shape[0]
+            assert ds_train[0][1].dtype == torch.int64 and ds_val[0][1].dtype == torch.int64, (ds_train[0][1].dtype, ds_val[0][1].dtype)
             return LikeTransformDataset(ds_train, train_like_transform), LikeTransformDataset(ds_val, val_like_transform), n_classes
 
 
@@ -376,8 +376,8 @@ def training_process(args: TrainingArgs):
         return model, optimizer, scheduler
 
     # shared between all processes
-    # loss_fn = torch.nn.CrossEntropyLoss(ignore_index=255)
-    loss_fn = torch.nn.BCEWithLogitsLoss()
+    loss_fn = torch.nn.CrossEntropyLoss(ignore_index=255)
+    # loss_fn = torch.nn.BCEWithLogitsLoss()
     model, optimizer, scheduler = create_model()
 
     if 'mpl' in args.strategy:
