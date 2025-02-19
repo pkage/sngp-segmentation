@@ -471,7 +471,7 @@ def training_process(args: TrainingArgs):
     return {
         'teacher': teacher_model, # probably None
         'model': model.state_dict(),
-        'config': asdict(args)
+        'config': asdict(args) if type(args) is TrainingArgs else args
     }
 
 
