@@ -69,8 +69,9 @@ def wandb_setup(args):
 
     assert os.environ.get("WANDB_PROJECT") is not None
     assert os.environ.get("WANDB_API_KEY") is not None
+    assert os.environ.get("WANDB_ENTITY") is not None
 
-    wandb.init(project=os.environ["WANDB_PROJECT"], config=vars(args))
+    wandb.init(project=os.environ["WANDB_PROJECT"], entity=os.environ["WANDB_ENTITY"], config=vars(args))
 
 
 def train_ddp(rank, device, epoch, model, loader, loss_fn, optimizer, accumulate=2, warmup=5):
@@ -90,11 +91,11 @@ def train_ddp(rank, device, epoch, model, loader, loss_fn, optimizer, accumulate
         # output_lng = output.type(torch.int64)
         # y_lng      = y.squeeze().type(torch.int64)
 
-        # loss = loss_fn(output, y.squeeze().type(torch.int64)) / accumulate
-        loss = loss_fn(
-            output.type(torch.float32),
-            y.squeeze().type(torch.float32)
-        ) / accumulate
+        loss = loss_fn(output, y.squeeze().type(torch.int64)) / accumulate
+        # loss = loss_fn(
+        #     output.type(torch.float32),
+        #     y.squeeze()
+        # ) / accumulate
         loss.backward()
         if step % accumulate == (accumulate - 1):
             optimizer.step()
@@ -103,15 +104,15 @@ def train_ddp(rank, device, epoch, model, loader, loss_fn, optimizer, accumulate
 
         ddp_loss[0] += loss.item()
         # we should be smarter about this when we have an ignore index:
-        # ddp_loss[1] += (
-        #     torch.where(y != loss_fn.ignore_index, (output.argmax(1) == y), 0.0)
-        #     .sum()
-        #     .item()
-        # )
-        # ddp_loss[2] += torch.where(y != loss_fn.ignore_index, 1.0, 0.0).sum().item()
-        ddp_loss[1] += (output.argmax(1) == y.argmax(1)).sum().item()
-        ddp_loss[2] += y.argmax(1).numel()
-        ddp_loss[3] += jaccard(output.argmax(1), y.argmax(1))
+        ddp_loss[1] += (
+            torch.where(y != loss_fn.ignore_index, (output.argmax(1) == y), 0.0)
+            .sum()
+            .item()
+        )
+        ddp_loss[2] += torch.where(y != loss_fn.ignore_index, 1.0, 0.0).sum().item()
+        # ddp_loss[1] += (output.argmax(1) == y.argmax(1)).sum().item()
+        # ddp_loss[2] += y.argmax(1).numel()
+        ddp_loss[3] += jaccard(output.argmax(1), y)
         ddp_loss[4] += 1
 
         step += 1
@@ -252,22 +253,22 @@ def test_ddp(rank, device, model, loader, loss_fn):
                 jaccard = MulticlassJaccardIndex(
                     num_classes=output.shape[1], ignore_index=255
                 ).to(device)
-            loss = loss_fn(output.type(torch.float32), y.type(torch.float32))
+            loss = loss_fn(output.type(torch.float32), y)
             ddp_loss[0] += loss.item()
-            # ddp_loss[1] += (
-            #     torch.where(y != loss_fn.ignore_index, (output.argmax(1) == y), 0)
-            #     .type(torch.float)
-            #     .sum()
-            #     .item()
-            # )
+            ddp_loss[1] += (
+                torch.where(y != loss_fn.ignore_index, (output.argmax(1) == y), 0)
+                .type(torch.float)
+                .sum()
+                .item()
+            )
             # ddp_loss[2] += torch.where(y != loss_fn.ignore_index, 1.0, 0.0).sum().item()
             # ddp_loss[3] += jaccard(output.argmax(1), y)
             # ddp_loss[4] += 1
-            ddp_loss[1] += (output.argmax(1) == y.argmax(1)).sum().item()
+            # ddp_loss[1] += (output.argmax(1) == y.argmax(1)).sum().item()
             ddp_loss[2] += y.numel()
             ddp_loss[3] += jaccard(
                 output.argmax(1),
-                y.to(device).argmax(1)
+                y.to(device)
             )
             ddp_loss[4] += 1
 
@@ -538,6 +539,7 @@ class LikeTransformDataset:
 
     def __iter__(self):
         for i in range(len(self)):
+            assert self[i].dtype == torch.int64
             yield self[i]
 
     def __len__(self):
