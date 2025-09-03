@@ -29,11 +29,10 @@ echo Node IP: $head_node_ip
 
 . /home/fagg/tf_setup.sh
 conda activate /home/jroth/.conda/envs/mct
-# wandb login --relogin 61c91ce464da16e3c0dcd699d42ba8e2822b930d
 
 export WANDB_ENTITY=ai2es
 export WANDB_PROJECT=unc-pl-seg
-export WANDB_API_KEY=61c91ce464da16e3c0dcd699d42ba8e2822b930d
+export WANDB_API_KEY=<your-key>
 
 srun torchrun \
 --nnodes $SLURM_JOB_NUM_NODES \
