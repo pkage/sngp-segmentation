@@ -115,7 +115,8 @@ def validate_args(args: TrainingArgs):
 # --- DATASET LOADING ---
 
     
-def copy_datasets(args: TrainingArgs):
+def copy_datasets(args: TrainingArgs): 
+    print(args.dataset)
     if args.dataset == 'cityscapes':
         assert args.cityscapes_path is not None
 
@@ -128,6 +129,7 @@ def copy_datasets(args: TrainingArgs):
 
         # only copy if we have to
         if not (args.scratch_path / args.voc_path.name).exists():
+            print('copying...')
             shutil.copy(args.voc_path, os.environ['LSCRATCH'])
 
 
