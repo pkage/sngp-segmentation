@@ -3,13 +3,13 @@ training_config = {
     'values': [25],
     'default': {
         'key': 'accumulate',
-        'values': [25],
+        'values': [4],
         'default': {
             'key': 'batch_size',
-            'values': [25],
+            'values': [32],
             'default': {
                 'key': 'test_batch_size',
-                'values': [25],
+                'values': [32],
                 'default': {
                     'key': 'learning_rate',
                     'values': [1e-3],
@@ -18,7 +18,7 @@ training_config = {
                         'values': [10],
                         'default': {
                             'key': 'dataset',
-                            'values': ['cityscapes', 'pascal-voc', 'coco'],
+                            'values': ['pascal-voc'],
                             'default': None
                         },
                     },
