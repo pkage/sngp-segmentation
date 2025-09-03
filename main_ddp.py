@@ -55,6 +55,11 @@ def parse_args():
     # parser.add_argument('--vit-ckpt', help='ViT checkpoint', default='../models/IN1K-vit.h.14-300e.pth.tar') # defaults to not breaking jay's code
     # parser.add_argument('--vit-cfg', help='ViT configuration', default='./in1k_vith14_ep300.yaml')
 
+    # dahps setup
+    parser.add_argument(
+        "--path", type=str, default='./hp_test', help="path for the hyperparameter search data"
+    )
+
     return parser.parse_args()
 
 def main():
