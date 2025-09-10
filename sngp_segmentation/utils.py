@@ -172,6 +172,7 @@ def mpl_ddp(
     teacher.train()
     student.train()
     for (X, y), (U, _) in tqdm(zip(train_loader, unlabeled_loader)):
+        X, y = X.to(device), y.to(device)
         output = MPL_Seg(
             U.to(device),
             X.to(device),
@@ -191,19 +192,19 @@ def mpl_ddp(
             ).to(device)
 
         ddp_loss[0] += 0.0
-        # ddp_loss[1] += (
-        #     torch.where(y.to(device) != loss_fn.ignore_index, (output.argmax(1) == y.to(device)), 0.0)
-        #     .sum()
-        #     .item()
-        # )
-        # ddp_loss[2] += torch.where(y != loss_fn.ignore_index, 1.0, 0.0).sum().item()
-        ddp_loss[1] += (output.argmax(1) == y).sum().item()
-        ddp_loss[2] += y.numel()
-        ddp_loss[3] += jaccard(
-            output.argmax(1),
-            y.to(device).argmax(1)
+        # we should be smarter about this when we have an ignore index:
+        ddp_loss[1] += (
+            torch.where(y != loss_fn.ignore_index, (output.argmax(1) == y), 0.0)
+            .sum()
+            .item()
         )
+        ddp_loss[2] += torch.where(y != loss_fn.ignore_index, 1.0, 0.0).sum().item()
+        # ddp_loss[1] += (output.argmax(1) == y.argmax(1)).sum().item()
+        # ddp_loss[2] += y.argmax(1).numel()
+        ddp_loss[3] += jaccard(output.argmax(1), y)
         ddp_loss[4] += 1
+
+        step += 1
 
     dist.all_reduce(ddp_loss, op=dist.ReduceOp.SUM)
     train_acc = ddp_loss[1] / ddp_loss[2]
@@ -449,8 +450,8 @@ def MPL_Seg(
     student_optimizer,
     teacher_optimizer,
     loss=torch.nn.CrossEntropyLoss(),
-    sup_teacher=False,
-    approx=False,
+    sup_teacher=True,
+    approx=True,
 ):
     SPL = teacher(U)  # compute the soft pseudo labels
     probs = torch.nn.Softmax(1)(SPL).detach().cpu().numpy()

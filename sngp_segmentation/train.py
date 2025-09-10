@@ -75,6 +75,7 @@ class TrainingArgs:
     dataset: Literal['cityscapes', 'pascal-voc', 'coco']
 
     train_iterations: int
+    pl_fraction: float
     ul_fraction: float
 
     scratch_path: Path
@@ -110,11 +111,12 @@ def validate_args(args: TrainingArgs):
 
     if 'self' in args.strategy:
         assert args.train_iterations > 0
-        assert args.ul_fraction >= 0
+        assert args.pl_fraction >= 0
 # --- DATASET LOADING ---
 
     
-def copy_datasets(args: TrainingArgs):
+def copy_datasets(args: TrainingArgs): 
+    print(args.dataset)
     if args.dataset == 'cityscapes':
         assert args.cityscapes_path is not None
 
@@ -127,6 +129,7 @@ def copy_datasets(args: TrainingArgs):
 
         # only copy if we have to
         if not (args.scratch_path / args.voc_path.name).exists():
+            print('copying...')
             shutil.copy(args.voc_path, os.environ['LSCRATCH'])
 
 
@@ -248,7 +251,7 @@ def get_datasets(args: TrainingArgs):
 
 # -- training loops
 
-def training_process(args: TrainingArgs):
+def training_process(args: TrainingArgs, agent):
     pprint(args)
     # convenience
     rank = int(os.environ['RANK'])
@@ -305,9 +308,11 @@ def training_process(args: TrainingArgs):
         )
 
 
-    
+    best_jacc = 0
 
     if 'self' in args.strategy:
+        ds_splitter = SplitVOCDataset(ds_train, fraction_labeled=args.ul_fraction)
+    elif 'mpl' in args.strategy:
         ds_splitter = SplitVOCDataset(ds_train, fraction_labeled=args.ul_fraction)
     else:
         ds_splitter = None
@@ -386,8 +391,10 @@ def training_process(args: TrainingArgs):
 
     dist.barrier()
 
-    for train_iteration in range(args.train_iterations):
-        print(f'Starting iteration {train_iteration+1} of {args.train_iterations}...')
+    train_iterations = vars(args).get('train_iterations') if vars(args).get('train_iterations') is not None else 1
+
+    for train_iteration in range(train_iterations):
+        print(f'Starting iteration {train_iteration+1} of {train_iterations}...')
 
         if 'baseline' in args.strategy or 'self' in args.strategy:
             for epoch in range(args.epochs):
@@ -415,7 +422,7 @@ def training_process(args: TrainingArgs):
 
                 loader_val = create_loader(ds_val, val_mode=True)
 
-                test_ddp(
+                test_acc, test_jaccard, test_loss = test_ddp(
                     get_rank(),
                     device,
                     model,
@@ -423,7 +430,12 @@ def training_process(args: TrainingArgs):
                     loss_fn
                 )
 
+                if test_jaccard > best_jacc:
+                    agent.save_checkpoint(model.state_dict())
+
                 scheduler.step(epoch=epoch)
+            
+            model.load_state_dict(agent.load_checkpoint())
 
         if 'baseline' in args.strategy:
             break
@@ -432,6 +444,7 @@ def training_process(args: TrainingArgs):
             dist.barrier()
 
             loader_train = create_loader(ds_train, val_mode=False)
+            loader_unlabeled = create_loader(ds_splitter.get_unlabeled(), val_mode=False)
             loader_val = create_loader(ds_val, val_mode=True)
             assert ds_splitter is not None
 
@@ -443,35 +456,48 @@ def training_process(args: TrainingArgs):
                     teacher_model,
                     model,
                     loader_train,
-                    ds_splitter.get_labeled(),
+                    loader_unlabeled,
                     loss_fn,
                     teacher_optimizer,
                     optimizer,
                     accumulate=args.accumulate
                 )
 
-                test_ddp(
+                test_acc, test_jaccard, test_loss = test_ddp(
                     get_rank(),
                     device,
-                    teacher_model,
+                    model,
                     loader_val,
                     loss_fn
                 )
+
+                if test_jaccard > best_jacc:
+                    agent.save_checkpoint({'student': model.state_dict(), 'teacher': teacher_model.state_dict()})
+            state = agent.load_checkpoint()
+            model.load_state_dict(state['student'])
+
             # single iteration for MPL
             warnings.warn('MPL is a single iteration method.  If you specified iterations greater than 1 only one iteration will be performed.')
             break
 
         if 'self' in args.strategy:
             assert ds_splitter is not None
-            ds_splitter.pseudo_label(model, args.ul_fraction, args.with_replacement)
+            ds_splitter.pseudo_label(model, args.pl_fraction, args.with_replacement)
         
         dist.barrier()
-        
+    
+    test_acc, test_jaccard, test_loss = test_ddp(
+        get_rank(),
+        device,
+        model,
+        loader_val,
+        loss_fn
+    )
     
     return {
         'teacher': teacher_model, # probably None
         'model': model.state_dict(),
-        'config': asdict(args) if type(args) is TrainingArgs else args
+        'config': vars(args)
     }
 
 
@@ -669,7 +695,7 @@ def self_training_process(args):
 
         model.load_state_dict(best_state)
         ds.reset()
-        ds.pseudo_label(model, args.ul_fraction, args.with_replacement)
+        ds.pseudo_label(model, args.pl_fraction, args.with_replacement)
         ds_train = ds.get_labeled()
         loader_train = DataLoader(ds_train, batch_size=args.batch_size, pin_memory=True, shuffle=True, num_workers=12, drop_last=True)
 

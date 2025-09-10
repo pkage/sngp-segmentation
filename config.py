@@ -3,13 +3,13 @@ training_config = {
     'values': [25],
     'default': {
         'key': 'accumulate',
-        'values': [25],
+        'values': [4],
         'default': {
             'key': 'batch_size',
-            'values': [25],
+            'values': [8],
             'default': {
                 'key': 'test_batch_size',
-                'values': [25],
+                'values': [16],
                 'default': {
                     'key': 'learning_rate',
                     'values': [1e-3],
@@ -18,7 +18,7 @@ training_config = {
                         'values': [10],
                         'default': {
                             'key': 'dataset',
-                            'values': ['cityscapes', 'pascal-voc', 'coco'],
+                            'values': ['pascal-voc'],
                             'default': None
                         },
                     },
@@ -30,21 +30,21 @@ training_config = {
 
 pl_config = {
     'key': 'strategy',
-    'values': ['mpl', 'self', 'baseline'],
+    'values': ['mpl'],
     'default': training_config,
-    'self': {
-        'key': 'pl_fraction',
-        'values': [0.1, 0.5, 1.0],
-        'default': {
-            'key': 'train_iterations',
-            'values': [10],
-            'default': {
-                'key': 'with_replacement',
-                'values': [True, False],
-                'default': None
-            },
-        },
-    },
+    # 'self': {
+    #     'key': 'pl_fraction',
+    #     'values': [0.1],
+    #     'default': {
+    #         'key': 'train_iterations',
+    #         'values': [10],
+    #         'default': {
+    #             'key': 'with_replacement',
+    #             'values': [True],
+    #             'default': training_config
+    #         },
+    #     },
+    # },
 }
 
 experiment_config = {
@@ -60,3 +60,4 @@ experiment_config = {
     'check_unique': True,
     'repetitions': 1
 }
+

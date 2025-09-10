@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+[project]
+name = "dahps"
+version = "0.0.1"
+authors = [
+  { name="Jay Rothenberger", email="jay.c.rothenberger@gmail.com" },
+]
+description = "A Distributed Asynchonous Hyperparameter Search Scheduler for SLURM systems"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "torch",
+            ]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: Unix",
+    "Topic :: Scientific/Engineering :: Machine Learning",
+]
+
+[project.urls]
+Homepage = "https://github.com/JayRothenberger/DAHPS"
+Issues = "https://github.com/JayRothenberger/DAHPS/issues"

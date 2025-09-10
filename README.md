@@ -12,9 +12,6 @@
 + `pl_fraction`
 
     The fraction of examples to bring in at each iteration of self-training.  This is the fraction of examples from the unlabeled set to which will actually be used in the training set for the next iteration.
-+ `ul_fraction`
-
-    The fraction of examples to hold out from the labeled set.  This is the complement of fraction of labels we use to train the model.  `ul_fraction` of `0.1` corresponds to using 90% of the labels available for training in this experiment.
 + `train_iterations`
 
     Iterations of self-training to perform.  This is the number of times that `pl_fraction` examples will be assigned a pseudo-label and introduced into the training set.
@@ -68,7 +65,9 @@ There are no parameters which are uniquely relevasnt to deep ensembles as a mode
 
 
     One of `['cityscapes', 'pascal-voc', 'coco']`, the dataset on which train the model with the algorithm.
++ `ul_fraction`
 
+    The fraction of examples to hold out from the labeled set.  This is the complement of fraction of labels we use to train the model.  `ul_fraction` of `0.1` corresponds to using 90% of the labels available for training in this experiment.
 ## wandb key setup
 
 on the target machine:
