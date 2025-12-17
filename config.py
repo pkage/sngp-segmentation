@@ -6,10 +6,10 @@ training_config = {
         'values': [4],
         'default': {
             'key': 'batch_size',
-            'values': [32],
+            'values': [16],
             'default': {
                 'key': 'test_batch_size',
-                'values': [32],
+                'values': [16],
                 'default': {
                     'key': 'learning_rate',
                     'values': [1e-3],
@@ -30,18 +30,18 @@ training_config = {
 
 pl_config = {
     'key': 'strategy',
-    'values': ['mpl', 'self', 'baseline'],
+    'values': ['self'],
     'default': training_config,
     'self': {
         'key': 'pl_fraction',
-        'values': [0.1, 0.5, 1.0],
+        'values': [0.1],
         'default': {
             'key': 'train_iterations',
             'values': [10],
             'default': {
                 'key': 'with_replacement',
-                'values': [True, False],
-                'default': None
+                'values': [True],
+                'default': training_config
             },
         },
     },
@@ -50,10 +50,10 @@ pl_config = {
 experiment_config = {
     'root': {
         'key': 'model',
-        'values': ['deeplab', 'unet', 'deep_ensemble', 'sngp'],
+        'values': ['sngp'],
         'default': {
             'key': 'ul_fraction',
-            'values': [i / 20 for i in range(20)],
+            'values': [0.5],
             'default': pl_config
         } 
     },

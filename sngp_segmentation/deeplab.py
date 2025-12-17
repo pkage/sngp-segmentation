@@ -76,6 +76,10 @@ class SNGPDeepLabV3_Resnet50(nn.Module):
 
         return self.rfgp(x, with_variance, update_precision)
     
+    def update_covariance(self):
+        self.rfgp.reset_covariance()
+        self.rfgp.update_covariance()
+    
 
 class DeepLabV3_Resnet50(nn.Module):
     def __init__(self, n_channels, n_classes, spectral_norm=False, weights: Path | None = torchvision.models.segmentation.DeepLabV3_ResNet50_Weights.COCO_WITH_VOC_LABELS_V1, **kwargs):

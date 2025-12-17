@@ -89,7 +89,7 @@ class RandomFeatureGaussianProcess(nn.Module):
     
         features = self.rff(X)
 
-        if update_precision:
+        if update_precision or self.training:
             self.update_precision_(features)
 
         logits = self.weight(features)

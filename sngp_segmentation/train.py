@@ -191,10 +191,14 @@ def get_datasets(args: TrainingArgs):
         ])
 
         target_trans = transforms.Compose([
-            LabelToTensor(255),
-            # VOCLabelTransform(),
+            # LabelToTensor(255),
+            VOCLabelTransform(),
             # OneHotLabelEncode(n_classes + 1),
             # slice_off_last_channel
+        ])
+
+        val_target_trans = transforms.Compose([
+            LabelToTensor(255),
         ])
 
         train_like_transform = transforms.Compose([
@@ -219,7 +223,7 @@ def get_datasets(args: TrainingArgs):
             os.environ['LSCRATCH'],
             image_set='val',
             transform=trans,
-            target_transform=target_trans,
+            target_transform=val_target_trans,
             download=True
         )
 
@@ -307,9 +311,6 @@ def training_process(args: TrainingArgs):
             drop_last=True
         )
 
-
-    
-
     if 'self' in args.strategy:
         ds_splitter = SplitVOCDataset(ds_train, fraction_labeled=args.ul_fraction)
     else:
@@ -389,8 +390,10 @@ def training_process(args: TrainingArgs):
 
     dist.barrier()
 
-    for train_iteration in range(args.train_iterations):
-        print(f'Starting iteration {train_iteration+1} of {args.train_iterations}...')
+    train_iterations = vars(args).get('train_iterations') if vars(args).get('train_iterations') is not None else 1
+
+    for train_iteration in range(train_iterations):
+        print(f'Starting iteration {train_iteration+1} of {train_iterations}...')
 
         if 'baseline' in args.strategy or 'self' in args.strategy:
             for epoch in range(args.epochs):
@@ -413,7 +416,8 @@ def training_process(args: TrainingArgs):
                     loader_train,
                     loss_fn,
                     optimizer,
-                    accumulate=args.accumulate
+                    accumulate=args.accumulate,
+                    warmup=args.warmup
                 )
 
                 loader_val = create_loader(ds_val, val_mode=True)
@@ -466,7 +470,9 @@ def training_process(args: TrainingArgs):
 
         if 'self' in args.strategy:
             assert ds_splitter is not None
-            ds_splitter.pseudo_label(model, args.pl_fraction, args.with_replacement)
+            if args.model == 'sngp':
+                model.module.update_covariance()
+            ds_splitter.pseudo_label(model, args.pl_fraction, args.with_replacement, sngp=args.model == 'sngp')
         
         dist.barrier()
         
@@ -474,7 +480,7 @@ def training_process(args: TrainingArgs):
     return {
         'teacher': teacher_model, # probably None
         'model': model.state_dict(),
-        'config': asdict(args)
+        'config': vars(args)
     }
 
 
@@ -745,7 +751,7 @@ def mpl_training_process(args):
     ds_train = ds.get_labeled()
     ds_unlabeled = ds.get_unlabeled()
     loader_train = DataLoader(ds_train, batch_size=args.batch_size, pin_memory=True, shuffle=True, num_workers=12)
-    loader_unlabeled = DataLoader(ds_train, batch_size=args.batch_size, pin_memory=True, shuffle=True, num_workers=12)
+    loader_unlabeled = DataLoader(ds_unlabeled, batch_size=args.batch_size, pin_memory=True, shuffle=True, num_workers=12)
 
     ds_val = torchvision.datasets.VOCSegmentation(os.environ['LSCRATCH'], image_set='val', transform=trans, target_transform=target_trans, download=True)
     loader_val = DataLoader(ds_val, batch_size=args.test_batch_size, pin_memory=True, shuffle=False, num_workers=12)

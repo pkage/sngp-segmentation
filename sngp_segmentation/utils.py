@@ -449,7 +449,7 @@ def MPL_Seg(
     student_optimizer,
     teacher_optimizer,
     loss=torch.nn.CrossEntropyLoss(),
-    sup_teacher=False,
+    sup_teacher=True,
     approx=False,
 ):
     SPL = teacher(U)  # compute the soft pseudo labels

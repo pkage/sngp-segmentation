@@ -94,7 +94,7 @@ class SplitVOCDataset:
         return copy(self.labeled)
     
     @torch.no_grad()
-    def rank_unlabeled_by_confidence(self, model, batch_size=32, label_type='hard'):
+    def rank_unlabeled_by_confidence(self, model, batch_size=32, label_type='hard', sngp=False):
 
         assert label_type in ['hard', 'soft'], 'label type must be one of ["hard", "soft"]'
 
@@ -102,26 +102,54 @@ class SplitVOCDataset:
 
         hard_pls = []
         soft_pls = []
+        uncs = []
 
-        for x, _ in loader_unlabeled:
-            # generate the prediction
-            soft_pl = model(x) # b, c, h, w
-            none_class = soft_pl.shape[1]
-            soft_pls.append(soft_pl.cpu())
+        if sngp:
+            for x, _ in loader_unlabeled:
+                with torch.no_grad():
+                    soft_pl, unc = model(x, with_variance=True)
+                uncs.append(unc.cpu())
+                none_class = soft_pl.shape[1] - 1
+                soft_pls.append(soft_pl.cpu())
 
-            # argmax the prediction
-            hard_pl = torch.argmax(soft_pl, 1) # b, h, w
+                # argmax the prediction
+                hard_pl = torch.argmax(soft_pl, 1) # b, h, w
 
-            # replace the last index with 255
-            hard_pl = torch.where(hard_pl == none_class, 255, hard_pl)
+                # replace the last index with 255
+                hard_pl = torch.where(hard_pl == none_class, 255, hard_pl)
 
-            # append the batch to the 
-            hard_pls.append(hard_pl.cpu())
+                # append the batch to the 
+                hard_pls.append(hard_pl.cpu())
 
-        soft_pls = torch.cat(soft_pls, 0)
-        hard_pls = torch.cat(hard_pls, 0).type(torch.uint8)
+            soft_pls = torch.cat(soft_pls, 0)
+            hard_pls = torch.cat(hard_pls, 0).type(torch.uint8)
+            uncs = torch.cat(uncs)
 
-        probs = torch.nn.functional.softmax(soft_pls, 1).mean(-1).mean(-1).max(-1)[0]
+            uncs = (uncs - uncs.min())
+            uncs = (uncs / uncs.max()) ** 0.5
+        else:
+            for x, _ in loader_unlabeled:
+                # generate the prediction
+                soft_pl = model(x) # b, c, h, w
+                none_class = soft_pl.shape[1] - 1
+                soft_pls.append(soft_pl.cpu())
+
+                # argmax the prediction
+                hard_pl = torch.argmax(soft_pl, 1) # b, h, w
+
+                # replace the last index with 255
+                hard_pl = torch.where(hard_pl == none_class, 255, hard_pl)
+
+                # append the batch to the 
+                hard_pls.append(hard_pl.cpu())
+
+            soft_pls = torch.cat(soft_pls, 0)
+            hard_pls = torch.cat(hard_pls, 0).type(torch.uint8)
+            uncs = 1 - torch.nn.functional.softmax(soft_pls, 1).max(-1)[0]
+
+        assert (hard_pls == 255).any(), f'no none class found {torch.unique(hard_pls)}, {soft_pl.shape}'
+
+        probs = torch.log((1 + 1e-4) - uncs).mean(-1).mean(-1)
         order = torch.argsort(probs)
 
         if label_type == 'hard':
@@ -142,7 +170,7 @@ class SplitVOCDataset:
         return label_paths
 
 
-    def pseudo_label(self, model, num_examples=0.05, with_replacement=True, batch_size=8):
+    def pseudo_label(self, model, num_examples=0.05, with_replacement=True, batch_size=8, sngp=False):
         if isinstance(num_examples, float):
             num_examples = int(num_examples*len(self.unlabeled))
 
@@ -153,7 +181,7 @@ class SplitVOCDataset:
         num_pl = self.num_unlabeled_examples - len(self.unlabeled)
 
         # generate the predictions
-        pl_inds_by_confidence, labels = self.rank_unlabeled_by_confidence(model, batch_size=batch_size)
+        pl_inds_by_confidence, labels = self.rank_unlabeled_by_confidence(model, batch_size=batch_size, sngp=sngp)
 
         label_inds = list(range(num_pl, num_pl + num_examples))
         # save the prediction images to a unique path
@@ -224,7 +252,7 @@ class VOCLabelTransform():
         
     def build_mapping(self):
         return {
-            255: 21
+            255: 20
         }
 
     def apply_mapping(self, target):
@@ -236,10 +264,10 @@ class VOCLabelTransform():
             idxs = arr == old_val
             out_arr[idxs] = new_val
         
-        return torch.tensor(out_arr).unsqueeze(0)
+        return torch.tensor(out_arr)
     
     def __call__(self, target):
-        return self.apply_mapping(target)
+        return self.apply_mapping(target).to(torch.int64)
 
 
 def slice_off_last_channel(img):
