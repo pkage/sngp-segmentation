@@ -108,15 +108,16 @@ class SplitVOCDataset:
             for x, _ in loader_unlabeled:
                 with torch.no_grad():
                     soft_pl, unc = model(x, with_variance=True)
+                    soft_pl = torch.nn.functional.softmax(soft_pl, 1)
                 uncs.append(unc.cpu())
-                none_class = soft_pl.shape[1] - 1
+                # none_class = soft_pl.shape[1] - 1
                 soft_pls.append(soft_pl.cpu())
 
                 # argmax the prediction
                 hard_pl = torch.argmax(soft_pl, 1) # b, h, w
 
                 # replace the last index with 255
-                hard_pl = torch.where(hard_pl == none_class, 255, hard_pl)
+                hard_pl = torch.where(soft_pl.max(1)[0] < 0.9, 255, hard_pl)
 
                 # append the batch to the 
                 hard_pls.append(hard_pl.cpu())
@@ -129,28 +130,33 @@ class SplitVOCDataset:
             uncs = (uncs / uncs.max()) ** 0.5
         else:
             for x, _ in loader_unlabeled:
-                # generate the prediction
-                soft_pl = model(x) # b, c, h, w
-                none_class = soft_pl.shape[1] - 1
+                with torch.no_grad():
+                    # generate the prediction
+                    soft_pl = model(x) # b, c, h, w
+                    soft_pl = torch.nn.functional.softmax(soft_pl, 1)
+                # none_class = soft_pl.shape[1] - 1
                 soft_pls.append(soft_pl.cpu())
 
                 # argmax the prediction
                 hard_pl = torch.argmax(soft_pl, 1) # b, h, w
 
                 # replace the last index with 255
-                hard_pl = torch.where(hard_pl == none_class, 255, hard_pl)
+                hard_pl = torch.where(soft_pl.max(1)[0] < 0.9, 255, hard_pl)
 
                 # append the batch to the 
                 hard_pls.append(hard_pl.cpu())
 
             soft_pls = torch.cat(soft_pls, 0)
             hard_pls = torch.cat(hard_pls, 0).type(torch.uint8)
-            uncs = 1 - torch.nn.functional.softmax(soft_pls, 1).max(-1)[0]
+            uncs = 1 - soft_pls.max(-1)[0]
 
         assert (hard_pls == 255).any(), f'no none class found {torch.unique(hard_pls)}, {soft_pl.shape}'
+        assert not (hard_pls == 255).all(), f'only none class found {torch.unique(hard_pls)}, {soft_pl.shape}'
+
+        print((hard_pls == 255).type(torch.float32).mean() * 100, '% masked')
 
         probs = torch.log((1 + 1e-4) - uncs).mean(-1).mean(-1)
-        order = torch.argsort(probs)
+        order = torch.argsort(probs, descending=True)
 
         if label_type == 'hard':
             return order, hard_pls

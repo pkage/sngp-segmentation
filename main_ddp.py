@@ -19,7 +19,7 @@ def parse_args():
 
     parser.add_argument('--fsdp', type=bool, default=False,
                         help='whether or not to reset the labeled and unlabeled sets after each iteration (default: %(default)s)')
-    parser.add_argument('-warm', '--warmup', type=float, default=0,
+    parser.add_argument('-warm', '--warmup', type=float, default=20,
                         help='number of epochs to freeze the backbone for (default: %(default)s)')
     parser.add_argument('-strat', '--strategy', type=str, default='self', help='Training strategy (default: %(default)s)')
     parser.add_argument('--voc_path', help='VOC file', type=Path, default='./VOCtrainval_11-May-2012.tar')
