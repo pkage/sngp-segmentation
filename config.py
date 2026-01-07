@@ -34,7 +34,7 @@ pl_config = {
     'default': training_config,
     'self': {
         'key': 'pl_fraction',
-        'values': [0.1],
+        'values': [0.5],
         'default': {
             'key': 'train_iterations',
             'values': [10],
