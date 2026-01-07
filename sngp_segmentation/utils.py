@@ -275,13 +275,13 @@ def test_ddp(rank, device, model, loader, loss_fn):
     dist.all_reduce(ddp_loss, op=dist.ReduceOp.SUM)
 
     test_acc = ddp_loss[1] / ddp_loss[2]
-    test_loss = ddp_loss[0] / ddp_loss[2]
+    test_loss = ddp_loss[0] / ddp_loss[4]
     test_jaccard = ddp_loss[3] / ddp_loss[4]
 
     if rank == 0:
         accuracy = 100 * (ddp_loss[1] / ddp_loss[2])
         jaccard = ddp_loss[3] / ddp_loss[4]
-        avg_loss = ddp_loss[0] / ddp_loss[2]
+        avg_loss = ddp_loss[0] / ddp_loss[4]
 
         print(
             "\tAccuracy: {:.2f}% \tJaccard: {:.2f} \tAverage Loss: {:.6f}".format(
@@ -330,14 +330,14 @@ def train(device, epoch, model, loader, loss_fn, optimizer, accumulate=1):
         ddp_loss[4] += 1
 
     train_acc = ddp_loss[1] / ddp_loss[2]
-    train_loss = ddp_loss[0] / ddp_loss[2]
+    train_loss = ddp_loss[0] / ddp_loss[4]
 
     print(
         "Train Epoch: {} \tAccuracy: {:.2f}% \tJaccard: {:.2f} \tAverage Loss: {:.6f}".format(
             epoch,
             100 * (ddp_loss[1] / ddp_loss[2]),
             ddp_loss[3] / ddp_loss[4],
-            ddp_loss[0] / ddp_loss[2],
+            ddp_loss[0] / ddp_loss[4],
         )
     )
 

@@ -180,9 +180,9 @@ def get_datasets(args: TrainingArgs):
 
         # imagenet transforms
         trans = transforms.Compose([
-            # transforms.Resize(),
             # torchvision.transforms.RandomCrop(321),
             # torchvision.transforms.RandomHorizontalFlip(),
+            torchvision.transforms.Resize((520, 520), antialias=True, interpolation=InterpolationMode.BILINEAR),
             transforms.ToTensor(),
             transforms.Normalize(
                 mean=[0.485, 0.456, 0.406], 
@@ -198,17 +198,19 @@ def get_datasets(args: TrainingArgs):
         ])
 
         val_target_trans = transforms.Compose([
-            LabelToTensor(255),
+            VOCLabelTransform(),
         ])
 
         train_like_transform = transforms.Compose([
-            torchvision.transforms.CenterCrop(321),
+            torch.nn.Identity(),
+            # torchvision.transforms.CenterCrop(321),
             # torchvision.transforms.RandomHorizontalFlip()
         ])
 
 
         val_like_transform = transforms.Compose([
-            torchvision.transforms.CenterCrop(321),
+            torch.nn.Identity(),
+            # torchvision.transforms.CenterCrop(321),
             # torchvision.transforms.RandomHorizontalFlip()
         ])
 
@@ -294,14 +296,14 @@ def training_process(args: TrainingArgs):
                 num_workers=12,
                 drop_last=True
             )
-
-
+        
         sampler_train = DistributedSampler(
             dataset,
             num_replicas=world_size,
             rank=rank,
             shuffle=True
         )
+        
         return DataLoader(
             dataset,
             batch_size=args.batch_size,
@@ -312,7 +314,7 @@ def training_process(args: TrainingArgs):
         )
 
     if 'self' in args.strategy:
-        ds_splitter = SplitVOCDataset(ds_train, fraction_labeled=args.ul_fraction)
+        ds_splitter = SplitVOCDataset(ds_train, fraction_labeled=1 - args.ul_fraction)
     else:
         ds_splitter = None
 
@@ -369,10 +371,11 @@ def training_process(args: TrainingArgs):
                 )
             )
 
-        optimizer = optim.Adam(
-            model.parameters(),
-            lr=args.learning_rate
-        )
+        optimizer = optim.SGD([{'params': model.module.deeplab.backbone.parameters(), 'lr': args.learning_rate},
+                {'params': [param for name, param in model.module.deeplab.named_parameters()
+                            if 'backbone' not in name],
+                'lr': args.learning_rate * 10}],
+            lr=args.learning_rate, momentum=0.9, weight_decay=1e-4)
 
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, args.epochs)
 
@@ -393,6 +396,7 @@ def training_process(args: TrainingArgs):
     train_iterations = vars(args).get('train_iterations') if vars(args).get('train_iterations') is not None else 1
 
     for train_iteration in range(train_iterations):
+        model, optimizer, scheduler = create_model()
         print(f'Starting iteration {train_iteration+1} of {train_iterations}...')
 
         if 'baseline' in args.strategy or 'self' in args.strategy:

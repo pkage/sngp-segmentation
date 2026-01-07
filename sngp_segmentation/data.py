@@ -9,6 +9,7 @@ from PIL import Image
 import einops
 import numpy as np
 import torch
+import torchvision
 import torch.nn.functional as F
 from torch.utils.data import DataLoader, Dataset
 from torchvision.datasets import Cityscapes
@@ -33,7 +34,7 @@ class SplitVOCDataset:
 
         self.randperm = torch.randperm(len(self.dataset), generator = generator)
         unlabeled_inds = list(self.randperm[:int(len(self.dataset)*(1 - self.fraction_labeled))])
-        labeled_inds = list(self.randperm[:int(len(self.dataset)*self.fraction_labeled)])
+        labeled_inds = list(self.randperm[int(len(self.dataset)*(1 - self.fraction_labeled)):])
 
         self.unlabeled = copy(self.dataset)
 
@@ -63,7 +64,7 @@ class SplitVOCDataset:
         self.randperm = torch.randperm(len(self.dataset), generator = generator)
 
         unlabeled_inds = list(self.randperm[:int(len(self.dataset)*(1 - self.fraction_labeled))])
-        labeled_inds = list(self.randperm[:int(len(self.dataset)*self.fraction_labeled)])
+        labeled_inds = list(self.randperm[int(len(self.dataset)*(1 - self.fraction_labeled)):])
 
         self.unlabeled = copy(self.dataset)
 
@@ -98,7 +99,7 @@ class SplitVOCDataset:
 
         assert label_type in ['hard', 'soft'], 'label type must be one of ["hard", "soft"]'
 
-        loader_unlabeled = DataLoader(self.unlabeled, batch_size=batch_size, pin_memory=True, shuffle=True, num_workers=12)
+        loader_unlabeled = DataLoader(self.unlabeled, batch_size=batch_size, pin_memory=True, shuffle=False, num_workers=12, drop_last=False)
 
         hard_pls = []
         soft_pls = []
@@ -148,20 +149,25 @@ class SplitVOCDataset:
 
             soft_pls = torch.cat(soft_pls, 0)
             hard_pls = torch.cat(hard_pls, 0).type(torch.uint8)
-            uncs = 1 - soft_pls.max(-1)[0]
-
+            uncs = 1 - soft_pls.max(1)[0]
+        
+        assert (hard_pls <= 255).all(), 'class out of range'
+        assert (0 <= hard_pls).all(), 'class out of range'
         assert (hard_pls == 255).any(), f'no none class found {torch.unique(hard_pls)}, {soft_pl.shape}'
         assert not (hard_pls == 255).all(), f'only none class found {torch.unique(hard_pls)}, {soft_pl.shape}'
 
         print((hard_pls == 255).type(torch.float32).mean() * 100, '% masked')
+        print(uncs.shape, hard_pls.shape)
 
         probs = torch.log((1 + 1e-4) - uncs).mean(-1).mean(-1)
         order = torch.argsort(probs, descending=True)
 
+        print(torch.unique(hard_pls))
+
         if label_type == 'hard':
-            return order, hard_pls
+            return order, hard_pls[order]
         elif label_type == 'soft':
-            return order, soft_pls
+            return order, soft_pls[order]
         
 
     def save_pseudo_labels(self, labels, inds):
@@ -177,14 +183,19 @@ class SplitVOCDataset:
 
 
     def pseudo_label(self, model, num_examples=0.05, with_replacement=True, batch_size=8, sngp=False):
-        if isinstance(num_examples, float):
+        if num_examples <= 1:
             num_examples = int(num_examples*len(self.unlabeled))
+        else:
+            num_examples = int(num_examples)
 
         if with_replacement:
             self.reset()
 
         # current number of pseudo labels is the amount of original unlabeled data minus the remaining amount
         num_pl = self.num_unlabeled_examples - len(self.unlabeled)
+
+        if with_replacement:
+            assert num_pl == 0
 
         # generate the predictions
         pl_inds_by_confidence, labels = self.rank_unlabeled_by_confidence(model, batch_size=batch_size, sngp=sngp)
@@ -196,12 +207,12 @@ class SplitVOCDataset:
         assert len(label_paths) == len(label_inds), f'expected number of pseudo label saved images to match the number of pseudo labels, found {len(label_paths)} and {len(label_inds)}'
 
         # add the paths to the labeled data array
-        for i, (path, u_ind) in enumerate(zip(label_paths, pl_inds_by_confidence)):
+        for _, (path, u_ind) in enumerate(zip(label_paths[:num_examples], pl_inds_by_confidence[:num_examples])):
             self.labeled.images.append(self.unlabeled.images[u_ind])
             self.labeled.masks.append(path)
 
         # remove the added paths from the unlabeled data array
-        for i in sorted(pl_inds_by_confidence[:num_examples])[::-1]:
+        for i in sorted(pl_inds_by_confidence[:num_examples], reverse=True):
             self.unlabeled.images.pop(i)
             self.unlabeled.masks.pop(i)
 
@@ -258,7 +269,7 @@ class VOCLabelTransform():
         
     def build_mapping(self):
         return {
-            255: 20
+            255: 21
         }
 
     def apply_mapping(self, target):
@@ -273,7 +284,9 @@ class VOCLabelTransform():
         return torch.tensor(out_arr)
     
     def __call__(self, target):
-        return self.apply_mapping(target).to(torch.int64)
+        return torchvision.transforms.Resize(
+            (520, 520), interpolation=torchvision.transforms.InterpolationMode.NEAREST
+        )(torch.tensor(np.array(target)).to(torch.int64).unsqueeze(0)).squeeze(0)
 
 
 def slice_off_last_channel(img):

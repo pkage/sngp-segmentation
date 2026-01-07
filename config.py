@@ -1,9 +1,9 @@
 training_config = {
     'key': 'epochs',
-    'values': [25],
+    'values': [3],
     'default': {
         'key': 'accumulate',
-        'values': [4],
+        'values': [2],
         'default': {
             'key': 'batch_size',
             'values': [16],
@@ -34,7 +34,7 @@ pl_config = {
     'default': training_config,
     'self': {
         'key': 'pl_fraction',
-        'values': [0.5],
+        'values': [1],
         'default': {
             'key': 'train_iterations',
             'values': [10],
@@ -50,10 +50,10 @@ pl_config = {
 experiment_config = {
     'root': {
         'key': 'model',
-        'values': ['sngp'],
+        'values': ['deeplab'],
         'default': {
             'key': 'ul_fraction',
-            'values': [0.5],
+            'values': [1 - 0.125],
             'default': pl_config
         } 
     },
