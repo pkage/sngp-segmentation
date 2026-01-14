@@ -269,7 +269,7 @@ class VOCLabelTransform():
         
     def build_mapping(self):
         return {
-            255: 21
+            # 255: 21 # clear mapping
         }
 
     def apply_mapping(self, target):
