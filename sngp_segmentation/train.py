@@ -179,7 +179,21 @@ def get_datasets(args: TrainingArgs):
         n_classes = 20 + 1
 
         # imagenet transforms
-        trans = transforms.Compose([
+        train_trans = transforms.Compose([
+            # torchvision.transforms.RandomCrop(321),
+            # torchvision.transforms.RandomHorizontalFlip(),
+            torchvision.transforms.Resize((520, 520), antialias=True, interpolation=InterpolationMode.BILINEAR),
+            transforms.ToTensor(),
+            transforms.ColorJitter(0.5, 0.5, 0.5, 0.25),
+            transforms.RandomGrayscale(p=0.2),
+            transforms.GaussianBlur(5, (0.01, 2)),
+            transforms.Normalize(
+                mean=[0.485, 0.456, 0.406], 
+                std=[0.229, 0.224, 0.225]
+            ),
+        ])
+
+        val_trans = transforms.Compose([
             # torchvision.transforms.RandomCrop(321),
             # torchvision.transforms.RandomHorizontalFlip(),
             torchvision.transforms.Resize((520, 520), antialias=True, interpolation=InterpolationMode.BILINEAR),
@@ -187,7 +201,7 @@ def get_datasets(args: TrainingArgs):
             transforms.Normalize(
                 mean=[0.485, 0.456, 0.406], 
                 std=[0.229, 0.224, 0.225]
-            )
+            ),
         ])
 
         target_trans = transforms.Compose([
@@ -217,14 +231,14 @@ def get_datasets(args: TrainingArgs):
         ds_train = torchvision.datasets.VOCSegmentation(
             os.environ['LSCRATCH'],
             image_set='train',
-            transform=trans,
+            transform=train_trans,
             target_transform=target_trans,
             download=True
         )
         ds_val = torchvision.datasets.VOCSegmentation(
             os.environ['LSCRATCH'],
             image_set='val',
-            transform=trans,
+            transform=val_trans,
             target_transform=val_target_trans,
             download=True
         )
@@ -397,7 +411,12 @@ def training_process(args: TrainingArgs):
 
     for train_iteration in range(train_iterations):
         model, optimizer, scheduler = create_model()
+        if train_iteration:
+            state = torch.load(os.path.join(os.environ['LSCRATCH'], 'checkpoint.pkl'))
+            model.load_state_dict(state)
+
         print(f'Starting iteration {train_iteration+1} of {train_iterations}...')
+        best_loss = float('inf')
 
         if 'baseline' in args.strategy or 'self' in args.strategy:
             for epoch in range(args.epochs):
@@ -426,13 +445,17 @@ def training_process(args: TrainingArgs):
 
                 loader_val = create_loader(ds_val, val_mode=True)
 
-                test_ddp(
+                test_acc, test_jacc, test_loss = test_ddp(
                     get_rank(),
                     device,
                     model,
                     loader_val,
                     loss_fn
                 )
+
+                if test_loss < best_loss:
+                    torch.save(model.state_dict(), os.path.join(os.environ['LSCRATCH'], 'checkpoint.pkl'))
+                    best_loss = test_loss
 
                 scheduler.step(epoch=epoch)
 
@@ -474,6 +497,8 @@ def training_process(args: TrainingArgs):
 
         if 'self' in args.strategy:
             assert ds_splitter is not None
+            state = torch.load(os.path.join(os.environ['LSCRATCH'], 'checkpoint.pkl'))
+            model.load_state_dict(state)
             if args.model == 'sngp':
                 model.module.update_covariance()
             ds_splitter.pseudo_label(model, args.pl_fraction, args.with_replacement, sngp=args.model == 'sngp')
