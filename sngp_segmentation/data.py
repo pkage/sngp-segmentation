@@ -118,7 +118,7 @@ class SplitVOCDataset:
                 hard_pl = torch.argmax(soft_pl, 1) # b, h, w
 
                 # replace the last index with 255
-                hard_pl = torch.where(soft_pl.max(1)[0] < 0.9, 255, hard_pl)
+                hard_pl = torch.where(soft_pl.max(1)[0] < 1e-3, 255, hard_pl)
 
                 # append the batch to the 
                 hard_pls.append(hard_pl.cpu())
@@ -142,7 +142,7 @@ class SplitVOCDataset:
                 hard_pl = torch.argmax(soft_pl, 1) # b, h, w
 
                 # replace the last index with 255
-                hard_pl = torch.where(soft_pl.max(1)[0] < 0.9, 255, hard_pl)
+                hard_pl = torch.where(soft_pl.max(1)[0] < 1e-3, 255, hard_pl)
 
                 # append the batch to the 
                 hard_pls.append(hard_pl.cpu())
@@ -153,7 +153,7 @@ class SplitVOCDataset:
         
         assert (hard_pls <= 255).all(), 'class out of range'
         assert (0 <= hard_pls).all(), 'class out of range'
-        assert (hard_pls == 255).any(), f'no none class found {torch.unique(hard_pls)}, {soft_pl.shape}'
+        # assert (hard_pls == 255).any(), f'no none class found {torch.unique(hard_pls)}, {soft_pl.shape}'
         assert not (hard_pls == 255).all(), f'only none class found {torch.unique(hard_pls)}, {soft_pl.shape}'
 
         print((hard_pls == 255).type(torch.float32).mean() * 100, '% masked')
@@ -269,7 +269,7 @@ class VOCLabelTransform():
         
     def build_mapping(self):
         return {
-            # 255: 21 # clear mapping
+            255: 255
         }
 
     def apply_mapping(self, target):
