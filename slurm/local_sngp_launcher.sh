@@ -2,8 +2,8 @@
 set -euo pipefail
 
 export WANDB_PROJECT=sngp-seg
-# export LSCRATCH=/media/hdd02/phd/sngp-segmentation/lscratch
-export LSCRATCH=/Volumes/Dock/phd/sngp-segmentation/lscratch/
+export LSCRATCH=/media/hdd02/phd/sngp-segmentation/lscratch
+# export LSCRATCH=/Volumes/Dock/phd/sngp-segmentation/lscratch/
 export WANDB_API_KEY=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
 export WANDB_ENTITY=pkage
 
@@ -11,7 +11,7 @@ mkdir -p "$LSCRATCH"
 
 DEVICE_TYPE=${SNGP_DEVICE_TYPE:-cuda}
 BACKEND=${TORCH_DISTRIBUTED_BACKEND:-nccl}
-NPROC_PER_NODE=${SNGP_NPROC_PER_NODE:-2}
+NPROC_PER_NODE=${SNGP_NPROC_PER_NODE:-1}
 
 PASSTHROUGH=()
 while [[ $# -gt 0 ]]; do
