@@ -60,7 +60,7 @@ class SNGPDeepLabV3_Resnet50(nn.Module):
             backbone=nn.Identity(),
             n_inducing=512,
             momentum = 0.99,
-            ridge_penalty = 1e-8,
+            ridge_penalty = 1e-6,
             activation = torch.nn.ReLU(), # torch.nn.ReLU(), #Cos(), # torch.nn.Sigmoid(),
             verbose = False,
         )
