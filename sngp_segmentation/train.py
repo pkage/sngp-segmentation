@@ -128,9 +128,9 @@ def copy_datasets(args: TrainingArgs):
         assert args.voc_path is not None
 
         # only copy if we have to
-        if not (args.scratch_path / args.voc_path.name).exists():
-            print('copying...')
-            shutil.copy(args.voc_path, os.environ['LSCRATCH'])
+        # if not (args.scratch_path / args.voc_path.name).exists():
+        #     print('copying...')
+        #     shutil.copy(args.voc_path, os.environ['LSCRATCH'])
 
 
 
@@ -229,18 +229,18 @@ def get_datasets(args: TrainingArgs):
         ])
 
         ds_train = torchvision.datasets.VOCSegmentation(
-            os.environ['LSCRATCH'],
+            args.voc_path,
             image_set='train',
             transform=train_trans,
             target_transform=target_trans,
-            download=True
+            download=False
         )
         ds_val = torchvision.datasets.VOCSegmentation(
-            os.environ['LSCRATCH'],
+            args.voc_path,
             image_set='val',
             transform=val_trans,
             target_transform=val_target_trans,
-            download=True
+            download=False
         )
 
         # if we're just doing pascal-voc, ditch here

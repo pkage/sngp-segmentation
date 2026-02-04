@@ -2,26 +2,27 @@ export DOWNLOAD_FUNCTION_URL=https://ledoejtumvyg2uiumzgibwc2ze0zzjgx.lambda-url
 
 mkdir -p $LSCRATCH/datasets
 mkdir -p $LSCRATCH/datasets/coco
+mkdir -p $LSCRATCH/datasets/voc
 
 echo "downloading cityscapes"
 
 if ! [ -f $LSCRATCH/datasets/gtFine_trainvaltest.zip ]; then
     echo "gtFine_trainvaltest.zip not found, downloading..."
-    curl -L $DOWNLOAD_FUNCTION_URL/gtFine_trainvaltest.zip -o $LSCRATCH/datasets/gtFine_trainvaltest.zip
+    curl -L $DOWNLOAD_FUNCTION_URL/datasets/gtFine_trainvaltest.zip -o $LSCRATCH/datasets/gtFine_trainvaltest.zip
 else
     echo "gtFine_trainvaltest.zip has already been downloaded."
 fi
 
 if ! [ -f $LSCRATCH/datasets/gtCoarse.zip ]; then
     echo "gtCoarse.zip not found, downloading..."
-    curl -L $DOWNLOAD_FUNCTION_URL/gtCoarse.zip -o $LSCRATCH/datasets/gtCoarse.zip
+    curl -L $DOWNLOAD_FUNCTION_URL/datasets/gtCoarse.zip -o $LSCRATCH/datasets/gtCoarse.zip
 else
     echo "gtCoarse.zip has already been downloaded."
 fi
 
 if ! [ -f $LSCRATCH/datasets/leftImg8bit_trainvaltest.zip ]; then
     echo "leftImg8bit_trainvaltest.zip not found, downloading..."
-    curl -L $DOWNLOAD_FUNCTION_URL/leftImg8bit_trainvaltest.zip -o $LSCRATCH/datasets/leftImg8bit_trainvaltest.zip
+    curl -L $DOWNLOAD_FUNCTION_URL/datasets/leftImg8bit_trainvaltest.zip -o $LSCRATCH/datasets/leftImg8bit_trainvaltest.zip
 else
     echo "leftImg8bit_trainvaltest.zip has already been downloaded."
 fi
@@ -57,10 +58,9 @@ fi
 
 
 
-# ... and the voc
-# if ! [ -f ./VOCtrainval_11-May-2012.tar ]; then
-#     echo "voc not found, downloading..."
-#     curl -L -O -J http://host.robots.ox.ac.uk/pascal/VOC/voc2012/VOCtrainval_11-May-2012.tar
-# else
-#     echo "voc has been downloaded already"
-# fi
+if ! [ -f $LSCRATCH/datasets/voc/VOCtrainval_11-May-2012.tar ]; then
+    echo "voc not found, downloading..."
+    curl -L $DOWNLOAD_FUNCTION_URL/datasets/voc/VOCtrainval_11-May-2012.tar -o $LSCRATCH/datasets/voc/VOCtrainval_11-May-2012.tar
+else
+    echo "voc has been downloaded already"
+fi
