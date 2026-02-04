@@ -1,7 +1,6 @@
 import argparse
 from pathlib import Path
 import os
-import torch
 
 from dotenv import load_dotenv
 
@@ -41,10 +40,6 @@ def main():
     setup()
 
     rank = int(os.environ["RANK"])
-
-    device = rank % torch.cuda.device_count()
-    print(f"rank {rank} running on device {device} (of {torch.cuda.device_count()})")
-    torch.cuda.set_device(device)
 
     agent = DARS.from_config(args.path, config)
 

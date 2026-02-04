@@ -271,20 +271,43 @@ def get_datasets(args: TrainingArgs):
 
 # -- training loops
 
+
+def resolve_device(rank: int):
+    device_type = os.environ.get('SNGP_DEVICE_TYPE', 'cuda').lower()
+
+    if device_type == 'cuda':
+        if not torch.cuda.is_available():
+            raise RuntimeError('CUDA was requested but is not available.')
+        device_count = torch.cuda.device_count()
+        if device_count == 0:
+            raise RuntimeError('CUDA was requested but no devices are visible.')
+        device_index = rank % device_count
+        torch.cuda.set_device(device_index)
+        device = torch.device('cuda', device_index)
+        print(f'rank {rank} running on CUDA device {device_index} (of {device_count})')
+        device_ids = [device_index]
+    elif device_type == 'mps':
+        if not torch.backends.mps.is_available():
+            raise RuntimeError('MPS was requested but is not available in this PyTorch build.')
+        device = torch.device('mps')
+        device_ids = None
+        print(f'rank {rank} running on Apple MPS device')
+    else:
+        raise ValueError(f'Unsupported device type: {device_type}')
+
+    return device, device_ids
+
+
 def training_process(args: TrainingArgs):
     pprint(args)
     # convenience
     rank = int(os.environ['RANK'])
     world_size = int(os.environ['WORLD_SIZE'])
 
-    # device setup (todo: support MPS for testing)
-    device = rank % torch.cuda.device_count()
-    print(f'rank {rank} running on device {device} (of {torch.cuda.device_count()})')
-    torch.cuda.set_device(device)
-
+    device, device_ids = resolve_device(rank)
 
     # copy the datasets into our scratch space if we're the lead worker
-    if device == 0:
+    if rank == 0:
         copy_datasets(args)
 
         # cram in a lead worker creation of the checkpoint path
@@ -364,10 +387,14 @@ def training_process(args: TrainingArgs):
         else:
             raise ValueError(f'no such model {args.model}')
 
+        ddp_kwargs = dict(find_unused_parameters=True)
+        if device_ids is not None:
+            ddp_kwargs["device_ids"] = device_ids
+            ddp_kwargs["output_device"] = device_ids[0]
+
         model = DDP(
             model,
-            device_ids=[device],
-            find_unused_parameters=True
+            **ddp_kwargs
         )
 
         if args.fsdp:

@@ -15,8 +15,9 @@ from PIL import Image
 
 
 def setup():
+    backend = os.environ.get("TORCH_DISTRIBUTED_BACKEND", "nccl")
     dist.init_process_group(
-        "nccl", rank=int(os.environ["RANK"]), world_size=int(os.environ["WORLD_SIZE"])
+        backend, rank=int(os.environ["RANK"]), world_size=int(os.environ["WORLD_SIZE"])
     )
 
 
