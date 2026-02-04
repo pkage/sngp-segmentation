@@ -59,7 +59,7 @@ def normalize_args(args):
         if isinstance(value, str):
             setattr(args, field, value.strip().lower())
 
-    bool_fields = ('fsdp', 'with_replacement')
+    bool_fields = ('fsdp', 'with_replacement', 'amp')
     for field in bool_fields:
         setattr(args, field, bool(getattr(args, field, False)))
 
@@ -118,6 +118,8 @@ def parse_args():
 
     parser.add_argument('--fsdp', type=str2bool, default=False,
                         help='enable Fully Sharded Data Parallel (default: %(default)s)')
+    parser.add_argument('--amp', type=str2bool, default=False,
+                        help='enable CUDA Automatic Mixed Precision (AMP) for training (default: %(default)s)')
     parser.add_argument('-warm', '--warmup', type=float, default=0,
                         help='epochs to freeze the backbone (default: %(default)s)')
     parser.add_argument('-strat', '--strategy', type=str, default='self',

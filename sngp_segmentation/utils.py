@@ -75,33 +75,36 @@ def wandb_setup(args):
     wandb.init(project=os.environ["WANDB_PROJECT"], entity=os.environ["WANDB_ENTITY"], config=vars(args))
 
 
-def train_ddp(rank, device, epoch, model, loader, loss_fn, optimizer, accumulate=2, warmup=5):
+def train_ddp(rank, device, epoch, model, loader, loss_fn, optimizer, accumulate=2, warmup=5, use_amp=False):
     jaccard = None
     step = 0
     ddp_loss = torch.zeros(5).to(device)
     model.train()
+
+    use_cuda_amp = use_amp and isinstance(device, torch.device) and device.type == 'cuda'
+    scaler = torch.cuda.amp.GradScaler(enabled=use_cuda_amp)
+
     for X, y in tqdm(loader):
         X, y = X.to(device), y.to(device)
-        output = model(X, freeze_backbone=epoch < warmup)  # ), update_precision=False)
+        with torch.cuda.amp.autocast(enabled=use_cuda_amp):
+            output = model(X, freeze_backbone=epoch < warmup)
+            if jaccard is None:
+                jaccard = MulticlassJaccardIndex(
+                    num_classes=output.shape[1], ignore_index=255, average='macro', zero_division=1,
+                ).to(device)
+            loss = loss_fn(output, y.squeeze().type(torch.int64)) / accumulate
 
-        if jaccard is None:
-            jaccard = MulticlassJaccardIndex(
-                num_classes=output.shape[1], ignore_index=255, average='macro', zero_division=1,
-            ).to(device)
-
-        # output_lng = output.type(torch.int64)
-        # y_lng      = y.squeeze().type(torch.int64)
-
-        loss = loss_fn(output, y.squeeze().type(torch.int64)) / accumulate
-        # loss = loss_fn(
-        #     output.type(torch.float32),
-        #     y.squeeze()
-        # ) / accumulate
-        loss.backward()
-        if step % accumulate == (accumulate - 1):
-            optimizer.step()
-            optimizer.zero_grad()
-
+        if use_cuda_amp:
+            scaler.scale(loss).backward()
+            if step % accumulate == (accumulate - 1):
+                scaler.step(optimizer)
+                scaler.update()
+                optimizer.zero_grad()
+        else:
+            loss.backward()
+            if step % accumulate == (accumulate - 1):
+                optimizer.step()
+                optimizer.zero_grad()
 
         ddp_loss[0] += loss.item()
         # we should be smarter about this when we have an ignore index:
@@ -111,8 +114,6 @@ def train_ddp(rank, device, epoch, model, loader, loss_fn, optimizer, accumulate
             .item()
         )
         ddp_loss[2] += torch.where(y != loss_fn.ignore_index, 1.0, 0.0).sum().item()
-        # ddp_loss[1] += (output.argmax(1) == y.argmax(1)).sum().item()
-        # ddp_loss[2] += y.argmax(1).numel()
         ddp_loss[3] += jaccard(output.argmax(1), y)
         ddp_loss[4] += 1
 
@@ -134,9 +135,6 @@ def train_ddp(rank, device, epoch, model, loader, loss_fn, optimizer, accumulate
                 accuracy,
                 jaccard,
                 avg_loss,
-                # 100*(ddp_loss[1] / ddp_loss[2]),
-                # ddp_loss[3] / ddp_loss[4],
-                # ddp_loss[0] / ddp_loss[2]
             )
         )
 
@@ -242,18 +240,21 @@ def mpl_ddp(
     return train_acc, test_jaccard, train_loss
 
 
-def test_ddp(rank, device, model, loader, loss_fn):
+def test_ddp(rank, device, model, loader, loss_fn, use_amp=False):
     ddp_loss = torch.zeros(5).to(device)
     model.eval()
     jaccard = None
+    use_cuda_amp = use_amp and isinstance(device, torch.device) and device.type == 'cuda'
     with torch.no_grad():
         for X, y in loader:
             X, y = X.to(device), y.to(device)
-            output = model(X, with_variance=False, update_precision=False)
+            with torch.cuda.amp.autocast(enabled=use_cuda_amp):
+                output = model(X, with_variance=False, update_precision=False)
             if jaccard is None:
                 jaccard = MulticlassJaccardIndex(
                     num_classes=output.shape[1], ignore_index=255
                 ).to(device)
+            # keep loss in fp32 for numerical stability
             loss = loss_fn(output.type(torch.float32), y)
             ddp_loss[0] += loss.item()
             ddp_loss[1] += (
@@ -262,10 +263,6 @@ def test_ddp(rank, device, model, loader, loss_fn):
                 .sum()
                 .item()
             )
-            # ddp_loss[2] += torch.where(y != loss_fn.ignore_index, 1.0, 0.0).sum().item()
-            # ddp_loss[3] += jaccard(output.argmax(1), y)
-            # ddp_loss[4] += 1
-            # ddp_loss[1] += (output.argmax(1) == y.argmax(1)).sum().item()
             ddp_loss[2] += y.numel()
             ddp_loss[3] += jaccard(
                 output.argmax(1),
@@ -289,9 +286,6 @@ def test_ddp(rank, device, model, loader, loss_fn):
                 accuracy,
                 jaccard,
                 avg_loss,
-                # 100*(ddp_loss[1] / ddp_loss[2]),
-                # ddp_loss[3] / ddp_loss[4],
-                # ddp_loss[0] / ddp_loss[2])
             )
         )
 

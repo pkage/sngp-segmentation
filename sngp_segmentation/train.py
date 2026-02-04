@@ -89,6 +89,7 @@ class TrainingArgs:
     # optional params
     fsdp: bool = False
     with_replacement: bool = True
+    amp: bool = False
 
 
 def validate_args(args: TrainingArgs):
@@ -467,7 +468,8 @@ def training_process(args: TrainingArgs):
                     loss_fn,
                     optimizer,
                     accumulate=args.accumulate,
-                    warmup=args.warmup
+                    warmup=args.warmup,
+                    use_amp=(getattr(args, 'amp', False) and not getattr(args, 'fsdp', False))
                 )
 
                 loader_val = create_loader(ds_val, val_mode=True)
@@ -477,7 +479,8 @@ def training_process(args: TrainingArgs):
                     device,
                     model,
                     loader_val,
-                    loss_fn
+                    loss_fn,
+                    use_amp=(getattr(args, 'amp', False) and not getattr(args, 'fsdp', False))
                 )
 
                 if test_loss < best_loss:
@@ -516,7 +519,8 @@ def training_process(args: TrainingArgs):
                     device,
                     teacher_model,
                     loader_val,
-                    loss_fn
+                    loss_fn,
+                    use_amp=(getattr(args, 'amp', False) and not getattr(args, 'fsdp', False))
                 )
             # single iteration for MPL
             warnings.warn('MPL is a single iteration method.  If you specified iterations greater than 1 only one iteration will be performed.')
