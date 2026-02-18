@@ -532,7 +532,13 @@ def training_process(args: TrainingArgs):
             model.load_state_dict(state)
             if args.model == 'sngp':
                 model.module.update_covariance()
-            ds_splitter.pseudo_label(model, args.pl_fraction, args.with_replacement, sngp=args.model == 'sngp')
+            ds_splitter.pseudo_label(
+                model,
+                args.pl_fraction,
+                args.with_replacement,
+                sngp=args.model == 'sngp',
+                use_amp=(getattr(args, 'amp', False) and not getattr(args, 'fsdp', False))
+            )
         
         dist.barrier()
         
@@ -738,7 +744,12 @@ def self_training_process(args):
 
         model.load_state_dict(best_state)
         ds.reset()
-        ds.pseudo_label(model, args.pl_fraction, args.with_replacement)
+        ds.pseudo_label(
+            model,
+            args.pl_fraction,
+            args.with_replacement,
+            use_amp=(getattr(args, 'amp', False) and not getattr(args, 'fsdp', False))
+        )
         ds_train = ds.get_labeled()
         loader_train = DataLoader(ds_train, batch_size=args.batch_size, pin_memory=True, shuffle=True, num_workers=12, drop_last=True)
 

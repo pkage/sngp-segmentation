@@ -95,79 +95,126 @@ class SplitVOCDataset:
         return copy(self.labeled)
     
     @torch.no_grad()
-    def rank_unlabeled_by_confidence(self, model, batch_size=32, label_type='hard', sngp=False):
+    def rank_unlabeled_by_confidence(self, model, num_examples, batch_size=32, label_type='hard', sngp=False, use_amp=False):
 
         assert label_type in ['hard', 'soft'], 'label type must be one of ["hard", "soft"]'
 
-        loader_unlabeled = DataLoader(self.unlabeled, batch_size=batch_size, pin_memory=True, shuffle=False, num_workers=12, drop_last=False)
+        device = next(model.parameters()).device
+        current_batch_size = batch_size
 
-        hard_pls = []
-        soft_pls = []
-        uncs = []
+        def build_loader(bs):
+            return DataLoader(
+                self.unlabeled,
+                batch_size=bs,
+                pin_memory=True,
+                shuffle=False,
+                num_workers=12,
+                drop_last=False
+            )
 
-        if sngp:
-            for x, _ in loader_unlabeled:
-                with torch.no_grad():
-                    soft_pl, unc = model(x, with_variance=True)
-                    soft_pl = torch.nn.functional.softmax(soft_pl, 1)
-                uncs.append(unc.cpu())
-                # none_class = soft_pl.shape[1] - 1
-                soft_pls.append(soft_pl.cpu())
+        while True:
+            try:
+                if sngp:
+                    loader_unlabeled = build_loader(current_batch_size)
+                    unc_min = None
+                    unc_max = None
+                    for x, _ in loader_unlabeled:
+                        x = x.to(device, non_blocking=True)
+                        with torch.no_grad():
+                            with torch.cuda.amp.autocast(enabled=use_amp):
+                                _, unc = model(x, with_variance=True)
+                        batch_min = unc.min().item()
+                        batch_max = unc.max().item()
+                        unc_min = batch_min if unc_min is None else min(unc_min, batch_min)
+                        unc_max = batch_max if unc_max is None else max(unc_max, batch_max)
 
-                # argmax the prediction
-                hard_pl = torch.argmax(soft_pl, 1) # b, h, w
+                    loader_unlabeled = build_loader(current_batch_size)
+                    scores = []
+                    denom = max(unc_max - unc_min, 1e-8)
+                    for x, _ in loader_unlabeled:
+                        x = x.to(device, non_blocking=True)
+                        with torch.no_grad():
+                            with torch.cuda.amp.autocast(enabled=use_amp):
+                                soft_pl, unc = model(x, with_variance=True)
+                                soft_pl = torch.nn.functional.softmax(soft_pl, 1)
+                        unc = (unc - unc_min) / denom
+                        unc = unc.clamp(min=0.0, max=1.0) ** 0.5
+                        probs = torch.log((1 + 1e-4) - unc).mean(-1).mean(-1)
+                        scores.append(probs.cpu())
+                else:
+                    loader_unlabeled = build_loader(current_batch_size)
+                    scores = []
+                    for x, _ in loader_unlabeled:
+                        x = x.to(device, non_blocking=True)
+                        with torch.no_grad():
+                            with torch.cuda.amp.autocast(enabled=use_amp):
+                                soft_pl = model(x)  # b, c, h, w
+                                soft_pl = torch.nn.functional.softmax(soft_pl, 1)
+                        unc = 1 - soft_pl.max(1)[0]
+                        probs = torch.log((1 + 1e-4) - unc).mean(-1).mean(-1)
+                        scores.append(probs.cpu())
 
-                # replace the last index with 255
-                hard_pl = torch.where(soft_pl.max(1)[0] < 1e-3, 255, hard_pl)
+                scores = torch.cat(scores, 0)
+                order = torch.argsort(scores, descending=True)
+                topk = order[:num_examples]
 
-                # append the batch to the 
-                hard_pls.append(hard_pl.cpu())
+                topk_list = topk.tolist()
+                if len(topk_list) == 0:
+                    empty = torch.empty((0,), dtype=torch.uint8 if label_type == 'hard' else torch.float32)
+                    return topk, empty
 
-            soft_pls = torch.cat(soft_pls, 0)
-            hard_pls = torch.cat(hard_pls, 0).type(torch.uint8)
-            uncs = torch.cat(uncs)
+                topk_set = set(topk_list)
+                rank_map = {idx: rank for rank, idx in enumerate(topk_list)}
+                labels = [None] * len(topk_list)
 
-            uncs = (uncs - uncs.min())
-            uncs = (uncs / uncs.max()) ** 0.5
-        else:
-            for x, _ in loader_unlabeled:
-                with torch.no_grad():
-                    # generate the prediction
-                    soft_pl = model(x) # b, c, h, w
-                    soft_pl = torch.nn.functional.softmax(soft_pl, 1)
-                # none_class = soft_pl.shape[1] - 1
-                soft_pls.append(soft_pl.cpu())
+                loader_unlabeled = build_loader(current_batch_size)
+                offset = 0
+                for x, _ in loader_unlabeled:
+                    x = x.to(device, non_blocking=True)
+                    with torch.no_grad():
+                        with torch.cuda.amp.autocast(enabled=use_amp):
+                            if sngp:
+                                soft_pl, _ = model(x, with_variance=True)
+                            else:
+                                soft_pl = model(x)
+                            soft_pl = torch.nn.functional.softmax(soft_pl, 1)
 
-                # argmax the prediction
-                hard_pl = torch.argmax(soft_pl, 1) # b, h, w
+                    if label_type == 'hard':
+                        hard_pl = torch.argmax(soft_pl, 1)
+                        hard_pl = torch.where(soft_pl.max(1)[0] < 1e-3, 255, hard_pl)
+                        hard_pl = hard_pl.cpu().type(torch.uint8)
+                        for i in range(hard_pl.shape[0]):
+                            global_idx = offset + i
+                            if global_idx in topk_set:
+                                labels[rank_map[global_idx]] = hard_pl[i]
+                    else:
+                        soft_pl = soft_pl.cpu()
+                        for i in range(soft_pl.shape[0]):
+                            global_idx = offset + i
+                            if global_idx in topk_set:
+                                labels[rank_map[global_idx]] = soft_pl[i]
 
-                # replace the last index with 255
-                hard_pl = torch.where(soft_pl.max(1)[0] < 1e-3, 255, hard_pl)
+                    offset += x.shape[0]
 
-                # append the batch to the 
-                hard_pls.append(hard_pl.cpu())
-
-            soft_pls = torch.cat(soft_pls, 0)
-            hard_pls = torch.cat(hard_pls, 0).type(torch.uint8)
-            uncs = 1 - soft_pls.max(1)[0]
-        
-        assert (hard_pls <= 255).all(), 'class out of range'
-        assert (0 <= hard_pls).all(), 'class out of range'
-        # assert (hard_pls == 255).any(), f'no none class found {torch.unique(hard_pls)}, {soft_pl.shape}'
-        assert not (hard_pls == 255).all(), f'only none class found {torch.unique(hard_pls)}, {soft_pl.shape}'
-
-        print((hard_pls == 255).type(torch.float32).mean() * 100, '% masked')
-        print(uncs.shape, hard_pls.shape)
-
-        probs = torch.log((1 + 1e-4) - uncs).mean(-1).mean(-1)
-        order = torch.argsort(probs, descending=True)
-
-        print(torch.unique(hard_pls))
+                if label_type == 'hard':
+                    labels = torch.stack(labels, 0)
+                    assert (labels <= 255).all(), 'class out of range'
+                    assert (0 <= labels).all(), 'class out of range'
+                    assert not (labels == 255).all(), f'only none class found {torch.unique(labels)}'
+                else:
+                    labels = torch.stack(labels, 0)
+                break
+            except torch.OutOfMemoryError:
+                if current_batch_size == 1:
+                    raise
+                current_batch_size = max(1, current_batch_size // 2)
+                torch.cuda.empty_cache()
 
         if label_type == 'hard':
-            return order, hard_pls[order]
-        elif label_type == 'soft':
-            return order, soft_pls[order]
+            print((labels == 255).type(torch.float32).mean() * 100, '% masked')
+            print(labels.shape)
+
+        return topk, labels
         
 
     def save_pseudo_labels(self, labels, inds):
@@ -182,7 +229,7 @@ class SplitVOCDataset:
         return label_paths
 
 
-    def pseudo_label(self, model, num_examples=0.05, with_replacement=True, batch_size=8, sngp=False):
+    def pseudo_label(self, model, num_examples=0.05, with_replacement=True, batch_size=8, sngp=False, use_amp=False):
         if num_examples <= 1:
             num_examples = int(num_examples*len(self.unlabeled))
         else:
@@ -198,7 +245,16 @@ class SplitVOCDataset:
             assert num_pl == 0
 
         # generate the predictions
-        pl_inds_by_confidence, labels = self.rank_unlabeled_by_confidence(model, batch_size=batch_size, sngp=sngp)
+        pl_inds_by_confidence, labels = self.rank_unlabeled_by_confidence(
+            model,
+            num_examples,
+            batch_size=batch_size,
+            sngp=sngp,
+            use_amp=use_amp
+        )
+
+        if labels.numel() == 0:
+            return
 
         label_inds = list(range(num_pl, num_pl + num_examples))
         # save the prediction images to a unique path
